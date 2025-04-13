@@ -30,10 +30,7 @@ def Bessel_function(num,k,lower_bound=1e-17):
         coefficient += coe_amp
     return coefficient
 
-def KROTOV_CHEBY(H,state,dt,c_ops=None,backwards=False,initialize=False):
-    E_max = 1
-    E_min = 0
-    return Chebyshev(H,state,E_max,E_min,dt,backwards = backwards)
+
 
 
 def Chebyshev(herm_mat,initial_state,E_max,E_min,dt,backwards = False):

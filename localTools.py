@@ -408,3 +408,5 @@ def random_guess_cos(t, control_args):
 def Hamiltonian(num_qubit=3, **kwargs):
     H0, Hc = Hamiltonian_Spin_Chain(num_qubit, **kwargs)
     return [qutip.Qobj(H0)] + [[qutip.Qobj(Hc[i]),lambda t,args:random_guess(t,args)] for i in range(len(Hc))]
+
+
