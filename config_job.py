@@ -1,4 +1,5 @@
-import read_write,numpy as np,localTools,re,qutip
+import read_write,numpy as np,localTools,re,qutip,Krotov_API,krotov,J_T_local
+from functools import partial
 from pathlib import Path
 from collections import defaultdict
 from scipy.interpolate import interp1d
@@ -43,6 +44,8 @@ def dict2string(ipt_dict):
             raise KeyError('Anyway the format of the input dictionary does not match.')
     return text_content
 
+str2float_keys = ['oct_lambda_a','lambda_a','t_start','t_stop','t_rise','f_fall']
+import matplotlib.pyplot as plt
 class Propagation:
     def __init__(self,Hamiltonian,tlist,prop_method,initial_states,pulse_name,pulse_options = None):
         self.Hamiltonian = Hamiltonian
@@ -56,6 +59,13 @@ class Propagation:
         self.pulse_name = pulse_name
         self.pulse_options = pulse_options
     
+    def krotov_pulse_options(self):
+        converted_options = {}
+        for k,v in self.pulse_options.items():
+                converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
+                                        t_start=self.tlist[0], t_stop=self.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
+        return converted_options
+
     def config(self,path,write = False):
         path_Path = Path(path)
         path_Path.mkdir(exist_ok=True,parents=True)
@@ -105,7 +115,7 @@ class Propagation:
         return config_dict
 
 class Optimization:
-    def __init__(self,prop,opt_method,JT_conv,delta_JT_conv,iter_dat,iter_stop):
+    def __init__(self,prop: Propagation,opt_method,JT_conv,delta_JT_conv,iter_dat,iter_stop):
         self.prop = prop
         self.oct_info = {
             'oct_method':opt_method,
@@ -153,8 +163,30 @@ class Optimization:
         with open(path + 'config', 'w') as config_file:
             config_file.write(config_text)
     
-    def Krotov_crun(self):
-        return 0
+    def Krotov_run(self,functional_name):
+        if self.oct_info['oct_method'] != 'krotov':
+            raise KeyError(f"Currently, only krotov is supported for the optimization. Input prop_method: {self.oct_info['oct_method']}")
+        if self.prop.prop_method == 'cheby':propagator=Krotov_API.KROTOV_CHEBY
+        elif self.prop.prop_method == 'expm':propagator=krotov.propagators.expm
+        else:raise KeyError(f"Currently, only cheby and expm is supported for the propagation. Input prop_method: {self.prop.prop_method}")
+        tlist = localTools.half_step_tlist(self.prop.tlist)
+        opt_functionals=J_T_local.functional_master(functional_name)
+        objectives=[krotov.Objective(initial_state=self.prop.initial_states[i],target=self.target_states[i],H=self.prop.Hamiltonian) for i in range(self.prop.n_states)]
+        krotov_pulse_options = self.prop.krotov_pulse_options()
+        opt_result=krotov.optimize_pulses(
+                objectives,krotov_pulse_options,tlist,
+                propagator=propagator,
+                chi_constructor=opt_functionals[0],
+                info_hook=krotov.info_hooks.print_table(
+                    J_T=opt_functionals[1],
+                    show_g_a_int_per_pulse=True,
+                    unicode=False),
+                check_convergence=krotov.convergence.Or(
+                    krotov.convergence.value_below(self.oct_info['JT_conv'], name='J_T'),
+                    krotov.convergence.delta_below(self.oct_info['delta_JT_conv']),
+                    krotov.convergence.check_monotonic_error),
+                iter_stop=self.oct_info['iter_stop'],store_all_pulses=True)
+        return opt_result
 
 def combine_relevant_lines(sentence_list):
     combined_lines = [sentence_list[0]+'\n']
@@ -246,7 +278,7 @@ def parse_config_with_subsections(file_path):
 def config_prop(path):
     config = parse_config_with_subsections(f'{path}config')
     prop_method = config['prop']['main']['prop_method']
-    tlist = [config['tgrid']['main']['t_start'],config['tgrid']['main']['t_stop'],config['tgrid']['main']['nt']]
+    tlist = [float(config['tgrid']['main']['t_start']),float(config['tgrid']['main']['t_stop']),int(config['tgrid']['main']['nt'])]
     pulses_info = [config['pulse']['subsections'][i] for i in range(len(config['pulse']['subsections']))]
     for i in range(len(pulses_info)):
         for key in config['pulse']['main'].keys():
@@ -280,7 +312,7 @@ def config_prop(path):
     for i in range(len(config['psi']['subsections'])):
         if config['psi']['subsections'][i]['label'] == 'initial':
             state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']))
-        initial_states.append(qutip.Qobj(state))
+            initial_states.append(qutip.Qobj(state))
     prop_obj = Propagation(Hamiltonian,tlist,prop_method,initial_states,'pulse_initial',pulse_options)
     return prop_obj,config
 
@@ -293,8 +325,21 @@ def config_opt(path):
     iter_dat = opt_info['iter_dat']
     iter_stop = int(opt_info['iter_stop'])
     opt_obj = Optimization(prop_obj,opt_method,JT_conv,delta_JT_conv,iter_dat,iter_stop)
+    target_states = []
+    for i in range(len(config['psi']['subsections'])):
+        if config['psi']['subsections'][i]['label'] == 'final':
+            state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']))
+            target_states.append(qutip.Qobj(state))
+    if len(target_states):
+        opt_obj.set_target_states(target_states)
+    if 'observables' in config.keys():
+        observables = []
+        for i in range(len(config['observables']['subsections'])):
+            observable = read_write.matrixReader(path+config['observables']['subsections'][i]['filename'],int(config['ham']['main']['dim']))
+        observables.append(qutip.Qobj(observable))
+        opt_obj.set_observables(observables)
     return opt_obj,config
 
 #print(parse_config_with_subsections(f'control_source/21.0/config'))
-config_opt('control_source/rf0/')
+#config_opt('control_source/rf0/')
 #config_task(f'control_source/21.0/')

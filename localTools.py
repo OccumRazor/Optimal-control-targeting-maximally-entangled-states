@@ -1,4 +1,4 @@
-import math,  random, os, shutil, numpy as np,qutip,time,scipy
+import math,  random, os, shutil, numpy as np,qutip,time,scipy,krotov
 from scipy.interpolate import interp1d
 from scipy.sparse import coo_matrix
 
@@ -46,7 +46,12 @@ def read_oct_iters(working_folder,delta_JT = False):
     if delta_JT:return [this_JTS[-1],(this_JTS[-2]-this_JTS[-1])/this_JTS[-1]]
     return this_JTS[-1]
 
+def S(t,t_start,t_stop,t_rise,t_fall):
+    """Scales the Krotov methods update of the pulse value at the time t"""
+    return krotov.shapes.flattop(t, t_start=t_start, t_stop=t_stop, t_rise=t_rise, t_fall=t_fall, func='blackman')
+
 def half_step_tlist(qdyn_tlist):
+    if len(qdyn_tlist) == 3:qdyn_tlist=qdyn_tlist[1:]
     dt = (qdyn_tlist[0]) / (qdyn_tlist[1] - 1)
     tgrid = np.linspace(
         float(dt / 2),
