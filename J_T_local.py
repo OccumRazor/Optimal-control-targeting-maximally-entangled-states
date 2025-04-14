@@ -54,9 +54,11 @@ def inFidelity(state,ref=False):
     return 1-localFidelity(state,ref)
 
 def functional_master(functional_name):
-    surnames = ["chis_", "J_T_", ""]
-    functional_names = [surname + functional_name for surname in surnames]
-    return [eval(functional) for functional in functional_names]
+    if functional_name == 'inFidelity':
+        return [chis_inFidelity,J_T_inFidelity,inFidelity]
+    #surnames = ["chis_", "J_T_", ""]
+    #functional_names = [surname + functional_name for surname in surnames]
+    #return [eval(functional) for functional in functional_names]
 
 def opVar(mat,state):
     mat_sqr = np.matmul(mat,mat)

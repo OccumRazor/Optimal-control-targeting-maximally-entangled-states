@@ -1,9 +1,9 @@
-import krotov,numpy as np,J_T_local,localTools,qutip,config_job
-import propagation_API
+import krotov,numpy as np,J_T_local,localTools,qutip,config_job,Krotov_API
+from functools import partial
 
-def S(t,T):
+def S(t,t_start,t_stop,t_rise,t_fall):
     """Scales the Krotov methods update of the pulse value at the time t"""
-    return krotov.shapes.flattop(t, t_start=0.0, t_stop=T, t_rise=1, func='blackman')
+    return krotov.shapes.flattop(t, t_start=t_start, t_stop=t_stop, t_rise=t_rise, t_fall=t_fall, func='blackman')
 def random_guess(t,control_args):
     fit_func=control_args.get('fit_func')
     return fit_func(t)
@@ -12,15 +12,26 @@ def random_guess_cos(t,control_args):
     freqX=control_args.get('freqX')
     return fit_func(t)*np.cos(freqX*t)*2
 
-def Krotov_call_0(tlist):
+def Krotov_config_runfolder(runfolder,tlist):
     H=localTools.Hamiltonian(num_qubit)
     initial_states = [localTools.canoGHZGen(num_qubit,'0'*num_qubit)]
-    prop = config_job.Propagation(H,tlist,'cheby',initial_states,'pulse_initial')
-    shapes = [S]*num_qubit
-    oct = config_job.Optimization(prop,'krotov',shapes)
+    pulse_options={}
+    control_source = 5
+    control_args = localTools.control_generator(num_qubit,control_source,T)
+    for i in range(1,len(H)):
+        pulse_options[H[i][1]]=dict(oct_lambda_a = 1, t_rise = 1, t_fall = 1, args=control_args[i-1])
+    prop = config_job.Propagation(H,tlist,'cheby',initial_states,'pulse_initial',pulse_options)
+    oct = config_job.Optimization(prop,'krotov',JT_conv=0.1,delta_JT_conv=1e-4,iter_dat='oct_iter.dat',iter_stop=1)
+    target_states = [qutip.Qobj(localTools.rotate_state(localTools.canoGHZGen(num_qubit,'6+'), num_qubit, 1, T))]
+    oct.set_target_states(target_states)
+    oct.config(runfolder)
+
 
 def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
-    from functools import partial
+    t_start=0
+    t_stop=T
+    t_rise=1
+    t_fall=1
     lambda_a=10
     H=localTools.Hamiltonian(num_qubit)
     shapes = [S]*num_qubit
@@ -33,13 +44,13 @@ def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
     if not control_source:control_source = 5
     control_args = localTools.control_generator(num_qubit,control_source,T,header)
     for i in range(1,len(H)):
-        pulse_options[H[i][1]]=dict(lambda_a=lambda_a,update_shape=partial(shapes[i-1],T=T),args=control_args[i-1])
+        pulse_options[H[i][1]]=dict(lambda_a=lambda_a,update_shape=partial(shapes[i-1],t_start=t_start, t_stop=t_stop, t_rise=t_rise, t_fall=t_fall),args=control_args[i-1])
     objectives=[krotov.Objective(initial_state=initial_states[i],target=target_states[i],H=H) for i in range(len(initial_states))]
     if JT == 0:functional_name = 'inFidelity'
     elif JT == 1:functional_name = 'XN'
     opt_functionals=J_T_local.functional_master(functional_name)
     #propagator=krotov.propagators.expm
-    propagator=propagation_API.KROTOV_CHEBY
+    propagator=Krotov_API.KROTOV_CHEBY
     opt_result=krotov.optimize_pulses(
             objectives,pulse_options,tlist,
             propagator=propagator,
@@ -52,13 +63,14 @@ def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
                 krotov.convergence.value_below(8e-3, name='J_T'),
                 krotov.convergence.delta_below(3e-7),
                 krotov.convergence.check_monotonic_error),
-            iter_stop=100,store_all_pulses=True)
+            iter_stop=0,store_all_pulses=True)
     return opt_result
 
 num_qubit = 4
 T=21.0
 #H=localTools.Hamiltonian(num_qubit)
 #print(H)
-opt_result=krotov_call(num_qubit,T,'0+',0,'control_source/21.0/','pulse_initial')
+Krotov_call_0('control_source/rf0/',[0,20,801])
+#opt_result=Krotov_call(num_qubit,T,'0+',0,'control_source/21.0/','pulse_initial')
 #opt_result=store_intermediate_state(num_qubit,T,'0+',0,'control_source/21.0/','pulse_oct')
 

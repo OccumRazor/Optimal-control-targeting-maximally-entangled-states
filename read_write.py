@@ -44,6 +44,18 @@ def control2text(tlist,amplitude):
     return text_content
 
 def stateReader(file_name, max_dim):
+    data = np.loadtxt(file_name, usecols=(0, 1))
+    if len(data.shape) == 1:
+        ids = int(data[0])
+        vals = data[1]
+        try:
+            imags = np.loadtxt(file_name, usecols=(2))
+            vals += 1j * imags[0]
+            state = np.zeros([max_dim, 1], dtype=np.complex128)
+        except Exception:
+            state = np.zeros([max_dim, 1])
+        state[ids] += vals
+        return state
     ids, vals = np.split(np.loadtxt(file_name, usecols=(0, 1)), 2, axis=1)
     ids = ids.T[0]
     ids = [int(ids[i] - 1) for i in range(len(ids))]
@@ -51,7 +63,7 @@ def stateReader(file_name, max_dim):
     try:
         imags = np.split(np.loadtxt(file_name, usecols=(2)), 1, axis=1)
         vals += 1j * imags.T[0]
-        state = np.zeros([max_dim, 1], dtype=np.complex128)    
+        state = np.zeros([max_dim, 1], dtype=np.complex128)
     except Exception:
         state = np.zeros([max_dim, 1])
     for i in range(len(ids)):
@@ -59,22 +71,35 @@ def stateReader(file_name, max_dim):
     return state
 
 def matrixReader(file_name, max_dim):
+    data = np.loadtxt(file_name, usecols=(0, 1))
+    if len(data.shape) == 1:
+        rows = int(data[0])
+        cols = int(data[1])
+        try:
+            vals = np.loadtxt(file_name, usecols=(2, 3))
+            vals = vals[0] + 1j * vals[1]
+            mat = np.zeros([max_dim, max_dim], dtype=np.complex128)
+        except Exception:
+            vals = np.loadtxt(file_name, usecols=(2))
+            mat = np.zeros([max_dim, max_dim])
+        mat[rows][cols] += vals
+        return mat
     rows, cols = np.split(np.loadtxt(file_name, usecols=(0, 1)), 2, axis=1)
     try:
         reals, imags = np.split(np.loadtxt(file_name, usecols=(2, 3)), 2, axis=1)
         vals = reals.T[0] + 1j * imags.T[0]
-        state = np.zeros([max_dim, max_dim], dtype=np.complex128)
+        mat = np.zeros([max_dim, max_dim], dtype=np.complex128)
     except Exception:
         vals = np.loadtxt(file_name, usecols=(2))
         vals = vals.T
-        state = np.zeros([max_dim, max_dim])
+        mat = np.zeros([max_dim, max_dim])
     rows = rows.T[0]
     cols = cols.T[0]
     rows = [int(rows[i] - 1) for i in range(len(rows))]
     cols = [int(cols[i] - 1) for i in range(len(cols))]
     for i in range(len(rows)):
-        state[rows[i]][cols[i]] += vals[i]
-    return state
+        mat[rows[i]][cols[i]] += vals[i]
+    return mat
 
 def controlReader(file_name):
     tlist, control = np.split(np.loadtxt(file_name, usecols=(0, 1)), 2, axis=1)
