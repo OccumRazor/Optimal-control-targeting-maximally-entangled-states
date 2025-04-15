@@ -1,4 +1,4 @@
-import numpy as np,math,qutip,random,copy,os,localTools,scipy
+import numpy as np,math,qutip,random,copy,os,localTools,scipy,read_write
 
 def tau(state,ref):
     res=0j
@@ -54,7 +54,7 @@ def inFidelity(state,ref=False):
     return 1-localFidelity(state,ref)
 
 def functional_master(functional_name):
-    if functional_name == 'inFidelity':
+    if functional_name == 'inFidelity' or 'JT_ss':
         return [chis_inFidelity,J_T_inFidelity,inFidelity]
     #surnames = ["chis_", "J_T_", ""]
     #functional_names = [surname + functional_name for surname in surnames]
@@ -119,7 +119,7 @@ def bestCat_phase(state,min_key=True,val_opt = False):
 
 def cat_res(folder,T,canoLabel):
     if os.path.exists(f'{folder}/psi_final_after_oct.dat'):
-        state = localTools.stateReader(f'{folder}/psi_final_after_oct.dat',4)
+        state = read_write.stateReader(f'{folder}/psi_final_after_oct.dat',16)
         state = localTools.rotate_state(state,4,0,float(T))
         JT_i = bestCat(state,False)
         best_JT_ss_m = min(JT_i)
@@ -133,7 +133,7 @@ def cat_res(folder,T,canoLabel):
 
 def cat_res_P(folder,T):
     if os.path.exists(f'{folder}/psi_final_after_oct.dat'):
-        state = localTools.stateReader(f'{folder}/psi_final_after_oct.dat',4)
+        state = read_write.stateReader(f'{folder}/psi_final_after_oct.dat',16)
         state = localTools.rotate_state(state,4,0,float(T))
         print(bestCat_phase(state,True))
 

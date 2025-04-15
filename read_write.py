@@ -1,16 +1,47 @@
-import title_routine,numpy as np
+import numpy as np
 from scipy.sparse import coo_matrix,coo_array
+
+space_symbol = ' '
+space4_symbol = '    '
+space5_symbol = '     '
+
+def pulse_title(is_complex):
+    text_info = '#'
+    text_info += space_symbol * 18 + 'time'
+    text_info += space4_symbol
+    text_info += space_symbol * 19 + 'real'
+    if is_complex == True:text_info += space_symbol * (19 + 4) + 'imag'
+    return text_info + '\n'
+
+def state_title(state_shape,is_complex):
+    len_max_row = len(str(state_shape[0]))
+    text_info = f'# n_row: {state_shape[0]}\n#'
+    text_info += space_symbol * (len_max_row + 2 - 3) + 'col'
+    text_info += space5_symbol
+    text_info += space_symbol * 18 + 'real'
+    if is_complex:text_info += space_symbol * (18 + 5) + 'imag'
+    return text_info + '\n'
+
+def matrix_title(matrix_shape,is_complex):
+    len_max_row = len(str(matrix_shape[0]))
+    text_info = f'# n_row: {matrix_shape[0]} n_col: {matrix_shape[1]}\n#'
+    text_info += space_symbol * (len_max_row + 2 - 3) + 'row'
+    text_info += space_symbol * len_max_row + 'col'
+    text_info += space5_symbol
+    text_info += space_symbol * 18 + 'real'
+    if is_complex:text_info += space_symbol * (18 + 5) + 'imag'
+    return text_info + '\n'
 
 def state2text(state):
     if not isinstance(state,coo_array):state=coo_array(state)
     is_complex = all(np.iscomplex(state.data))
-    text_content = title_routine.state_title(state.shape,is_complex)
+    text_content = state_title(state.shape,is_complex)
     state._len_max_row = len(str(state.shape[0]))
     for i in range(state.nnz):
-        initial = title_routine.space_symbol * (3 + state._len_max_row - len(str(state.row[i])))
-        real_formatted = title_routine.space4_symbol + "{: .16E}".format(np.real(state.data[i]))
+        initial = space_symbol * (3 + state._len_max_row - len(str(state.row[i])))
+        real_formatted = space4_symbol + "{: .16E}".format(np.real(state.data[i]))
         if is_complex:
-            imag_formatted = title_routine.space4_symbol + "{: .16E}".format(np.imag(state.data[i]))
+            imag_formatted = space4_symbol + "{: .16E}".format(np.imag(state.data[i]))
             text_content += f'{initial}{state.row[i]}{real_formatted}{imag_formatted}\n'
         else:text_content += f'{initial}{state.row[i]}{real_formatted}\n'
     return text_content
@@ -19,28 +50,28 @@ def matrix2text(matrix):
     if not isinstance(matrix,coo_matrix):matrix = coo_matrix(matrix)  
     len_max_row = len(str(matrix.shape[0]))  
     is_complex = all(np.iscomplex(matrix.data))
-    text_content = title_routine.matrix_title(matrix.shape,is_complex)
+    text_content = matrix_title(matrix.shape,is_complex)
     for i in range(len(matrix.row)):
-        row_text = title_routine.space_symbol * (3 + len_max_row - len(str(matrix.row[i]))) + str(matrix.row[i])
-        col_text = title_routine.space_symbol * (3 + len_max_row - len(str(matrix.col[i]))) + str(matrix.col[i])
-        imag_formatted = title_routine.space4_symbol +"{: .16E}".format(np.imag(matrix.data[i]))
-        real_formatted = title_routine.space4_symbol +"{: .16E}".format(np.real(matrix.data[i]))
+        row_text = space_symbol * (3 + len_max_row - len(str(matrix.row[i]))) + str(matrix.row[i])
+        col_text = space_symbol * (3 + len_max_row - len(str(matrix.col[i]))) + str(matrix.col[i])
+        imag_formatted = space4_symbol +"{: .16E}".format(np.imag(matrix.data[i]))
+        real_formatted = space4_symbol +"{: .16E}".format(np.real(matrix.data[i]))
         if is_complex:text_content += row_text + col_text + real_formatted + imag_formatted + '\n'
         else:text_content += row_text + col_text + real_formatted + '\n'
     return text_content
 
 def control2text(tlist,amplitude):
     is_complex = all(np.iscomplex(amplitude))
-    text_content = title_routine.pulse_title(is_complex)
+    text_content = pulse_title(is_complex)
     for i in range(len(tlist)):
         t_formatted = "{: .16E}".format(tlist[i])
         if is_complex:
             real_formatted = "{: .16E}".format(np.real(amplitude[i]))
             imag_formatted = "{: .16E}".format(np.imag(amplitude[i]))
-            text_content += t_formatted + title_routine.space4_symbol + real_formatted+ imag_formatted + '\n'
+            text_content += t_formatted + space4_symbol + real_formatted+ imag_formatted + '\n'
         else:
             amp_formatted = "{: .16E}".format(amplitude[i])
-            text_content += t_formatted + title_routine.space4_symbol + amp_formatted + '\n'
+            text_content += t_formatted + space4_symbol + amp_formatted + '\n'
     return text_content
 
 def stateReader(file_name, max_dim):

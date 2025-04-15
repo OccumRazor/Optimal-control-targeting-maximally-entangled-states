@@ -1,5 +1,5 @@
 from pathlib import Path
-import time, qutip, qdyn, qdyn.model, qdyn.pulse, os, subprocess, numpy as np,platform,localTools,J_T_local,csv
+import time, qutip, qdyn, qdyn.model, qdyn.pulse, os, subprocess, numpy as np,platform,localTools,J_T_local,csv,read_write
 import datetime,read_config
 
 def addHam2model(num_qubit,Ham_num,tgrid,control_source,endTime,header,t_rise,lambda_a,n_levels = False,dissipation=False,continue_from=False):
@@ -265,7 +265,7 @@ def qdyn_model(
         if JT == 2:read_config.kill_obsevable(str(Path(runfolder)))
         fieldnames = ['X_factor','N_factor','lambda_a']
         if isinstance(control_source,str):
-            src_state = localTools.stateReader(f'{control_source}/psi_final_after_oct.dat',4)
+            src_state = read_write.stateReader(f'{control_source}/psi_final_after_oct.dat',16)
             src_state = localTools.rotate_state(src_state,4,0,qdyn_tlist[0])
             cat_i,JT_i = J_T_local.bestCat(src_state)
             if "store" in run_method:

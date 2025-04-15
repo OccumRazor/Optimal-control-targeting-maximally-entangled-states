@@ -234,34 +234,6 @@ def stateReader(file_name, num_qubit,n_levels = False):
             file.write(f"Occured at \n{file_name}\n")
     return state
 
-def matrix2text(matrix):
-    if not isinstance(matrix,coo_matrix):matrix = coo_matrix(matrix)
-    mat_text = '# row  col'+ ' ' * 21 + 'real\n'
-    max_length = len(str(max(matrix._shape))) + 1
-    space_label = ' '
-    for i,j,val in zip(matrix.row,matrix.col,matrix.data):
-        real_formatted = "{: .16E}".format(np.real(val))
-        mat_text += f'  {space_label * (max_length-len(str(i+1)))}{i+1}  {space_label * (max_length-len(str(j+1)))}{j+1}  {real_formatted}\n'
-    return mat_text
-
-def matrixReader(file_name, max_dim):
-    rows, cols = np.split(np.loadtxt(file_name, usecols=(0, 1)), 2, axis=1)
-    try:
-        reals, imags = np.split(np.loadtxt(file_name, usecols=(2, 3)), 2, axis=1)
-        vals = reals.T[0] + 1j * imags.T[0]
-        state = np.zeros([max_dim, max_dim], dtype=np.complex128)
-    except Exception:
-        vals = np.loadtxt(file_name, usecols=(2))
-        vals = vals.T
-        state = np.zeros([max_dim, max_dim])
-    rows = rows.T[0]
-    cols = cols.T[0]
-    rows = [int(rows[i] - 1) for i in range(len(rows))]
-    cols = [int(cols[i] - 1) for i in range(len(cols))]
-    for i in range(len(rows)):
-        state[rows[i]][cols[i]] += vals[i]
-    return state
-
 def write_pulse(tlist,pulse,file_title):
     with open(file_title,'a') as log_f:
         for t,amp in zip(tlist,pulse):

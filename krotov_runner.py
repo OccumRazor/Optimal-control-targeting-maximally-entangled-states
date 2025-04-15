@@ -25,7 +25,7 @@ def Krotov_config_runfolder(runfolder,tlist):
 
 def Krotov_run(runfolder):
     opt_obj,config = config_job.config_opt(runfolder)
-    opt_obj.Krotov_run('inFidelity')
+    opt_obj.Krotov_run(runfolder,'inFidelity')
 
 def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
     t_start=0
@@ -70,7 +70,7 @@ num_qubit = 4
 #T=21.0
 #H=localTools.Hamiltonian(num_qubit)
 #print(H)
-Krotov_config_runfolder('control_source/rf2/',[0,20,801])
+#Krotov_config_runfolder('control_source/rf1/',[0,20,801])
 Krotov_run('control_source/rf2/')
 #opt_result=Krotov_call(num_qubit,T,'0+',0,'control_source/21.0/','pulse_initial')
 #opt_result=store_intermediate_state(num_qubit,T,'0+',0,'control_source/21.0/','pulse_oct')

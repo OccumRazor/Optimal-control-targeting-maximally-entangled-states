@@ -1,6 +1,4 @@
-import copy,math,numpy as np
-from scipy.sparse import csr_matrix,csc_matrix,dia_matrix
-import J_T_local
+import numpy as np
 from scipy.special import jv,j0,j1
 
 '''.vscode\
@@ -30,9 +28,6 @@ def Bessel_function(num,k,lower_bound=1e-17):
         coefficient += coe_amp
     return coefficient
 
-
-
-
 def Chebyshev(herm_mat,initial_state,E_max,E_min,dt,backwards = False):
     if isinstance(herm_mat,list):herm_mat=np.array(herm_mat)
     Delta = E_max - E_min
@@ -41,24 +36,20 @@ def Chebyshev(herm_mat,initial_state,E_max,E_min,dt,backwards = False):
     if max_eval < 40: max_eval = 40
     if max_eval > 500: raise ValueError(f"variable max_eval {max_eval} is larger than 500, decrease dt to decrease max_eval.")
     if backwards == False: # forward propagation 
-        H = -1j * herm_mat * dt / R
-        norm_factor = -1j * (E_max + E_min) / Delta
-        phase_factor = np.exp(-1j * (E_max + E_min) * dt / 2)
-    else: # backward propagation
-        H = 1j * herm_mat * dt / R
-        norm_factor = 1j * (E_max + E_min) / Delta
-        phase_factor = np.exp(1j * (E_max + E_min) * dt / 2)
+        p0 = -1j
+    else:
+        p0 = 1j
+    H = (p0 * dt / R) * herm_mat
+    norm_factor = p0 * (E_max + E_min) / Delta
+    phase_factor = np.exp(p0 * (E_max + E_min) * dt / 2)
     phi0 = initial_state
-    #Bessel_index = [Bessel_function(R,i) for i in range(max_eval)]
     Bessel_index = [j0(R),j1(R)] + [jv(i,R) for i in range(2,max_eval)]
-    #phi1 = np.matmul(H,phi0) - norm_factor * phi0
     phi1 = H.dot(phi0) - norm_factor * phi0
     final_state = 2 * Bessel_index[1] * phi1 + Bessel_index[0] * phi0
     norm_factor *= 2
     H *= 2
     for k in range(2,max_eval):
         phi2 = H.dot(phi1)  - norm_factor * phi1 + phi0
-        #phi2 = np.matmul(H,phi1)  - norm_factor * phi1 + phi0
         final_state += 2 * Bessel_index[k] * phi2
         phi0 = phi1
         phi1 = phi2

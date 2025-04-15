@@ -1,4 +1,4 @@
-import read_write,numpy as np,localTools,re,qutip,Krotov_API,krotov,J_T_local
+import read_write,numpy as np,localTools,re,qutip,Krotov_API,krotov,J_T_local,os
 from functools import partial
 from pathlib import Path
 from collections import defaultdict
@@ -45,7 +45,7 @@ def dict2string(ipt_dict):
     return text_content
 
 str2float_keys = ['oct_lambda_a','lambda_a','t_start','t_stop','t_rise','f_fall']
-import matplotlib.pyplot as plt
+
 class Propagation:
     def __init__(self,Hamiltonian,tlist,prop_method,initial_states,pulse_name,pulse_options = None):
         self.Hamiltonian = Hamiltonian
@@ -65,6 +65,9 @@ class Propagation:
                 converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
                                         t_start=self.tlist[0], t_stop=self.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
         return converted_options
+
+    def propagate(self):
+        return 0
 
     def config(self,path,write = False):
         path_Path = Path(path)
@@ -163,9 +166,21 @@ class Optimization:
         with open(path + 'config', 'w') as config_file:
             config_file.write(config_text)
     
-    def Krotov_run(self,functional_name):
+    def write2runfolder(self,runfolder,opt_result):
+        tlist_long = localTools.half_step_tlist(self.prop.tlist)
+        for i in range(len(opt_result.optimized_controls)):
+            control_text = read_write.control2text(tlist_long,opt_result.optimized_controls[i])
+            with open(runfolder+f'pulse_oct_{i}.dat','w') as pulse_f:
+                pulse_f.write(control_text)
+        state_text = read_write.state2text(opt_result.states[-1].full())
+        with open(runfolder+'psi_final_after_oct.dat','w') as state_f:
+            state_f.write(state_text)
+
+    def Krotov_run(self,runfolder,functional_name):
+        path_Path = Path(runfolder)
+        path_Path.mkdir(exist_ok=True,parents=True)
         if self.oct_info['oct_method'] != 'krotov':
-            raise KeyError(f"Currently, only krotov is supported for the optimization. Input prop_method: {self.oct_info['oct_method']}")
+            raise KeyError(f"Currently, only krotov and crab is supported for the optimization. Input prop_method: {self.oct_info['oct_method']}")
         if self.prop.prop_method == 'cheby':propagator=Krotov_API.KROTOV_CHEBY
         elif self.prop.prop_method == 'expm':propagator=krotov.propagators.expm
         else:raise KeyError(f"Currently, only cheby and expm is supported for the propagation. Input prop_method: {self.prop.prop_method}")
@@ -173,6 +188,7 @@ class Optimization:
         opt_functionals=J_T_local.functional_master(functional_name)
         objectives=[krotov.Objective(initial_state=self.prop.initial_states[i],target=self.target_states[i],H=self.prop.Hamiltonian) for i in range(self.prop.n_states)]
         krotov_pulse_options = self.prop.krotov_pulse_options()
+        out_file = open(runfolder+self.oct_info['iter_dat'],'w')
         opt_result=krotov.optimize_pulses(
                 objectives,krotov_pulse_options,tlist,
                 propagator=propagator,
@@ -180,12 +196,16 @@ class Optimization:
                 info_hook=krotov.info_hooks.print_table(
                     J_T=opt_functionals[1],
                     show_g_a_int_per_pulse=True,
-                    unicode=False),
+                    unicode=False,
+                    col_formats=('%d', '%.13e', '%.13e', '%.13e', '%.13e', '%.13e', '%.13e', '%d'),
+                    out=out_file),
                 check_convergence=krotov.convergence.Or(
                     krotov.convergence.value_below(self.oct_info['JT_conv'], name='J_T'),
                     krotov.convergence.delta_below(self.oct_info['delta_JT_conv']),
                     krotov.convergence.check_monotonic_error),
-                iter_stop=self.oct_info['iter_stop'],store_all_pulses=True)
+                iter_stop=self.oct_info['iter_stop'],store_all_pulses=False)
+        out_file.close()
+        self.write2runfolder(runfolder,opt_result)
         return opt_result
 
 def combine_relevant_lines(sentence_list):

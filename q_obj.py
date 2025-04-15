@@ -1,4 +1,4 @@
-import os,numpy as np,qutip,matplotlib.pyplot as plt,types,title_routine,read_write
+import os,numpy as np,qutip,matplotlib.pyplot as plt,types,read_write
 from scipy.sparse import coo_matrix,coo_array
 
 def matrix_verifier(ipt_matrix):

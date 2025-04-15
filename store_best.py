@@ -1,4 +1,4 @@
-import os ,numpy as np,shutil,matplotlib.pyplot as plt,localTools,read_config,subprocess,csv,QSL_search,re
+import os ,numpy as np,shutil,matplotlib.pyplot as plt,localTools,read_config,subprocess,csv,QSL_search,re,read_write
 from scipy.interpolate import interp1d
 from J_T_local import bestCat
 
@@ -358,7 +358,7 @@ def cat_res(folder):
         if all(['.log' not in item, '.pdf' not in item]):
             sub_items = os.listdir(folder + item)
             for sub_item in sub_items:
-                state = localTools.stateReader(f'{folder}{item}/{sub_item}/psi_final_after_oct.dat',4)
+                state = read_write.stateReader(f'{folder}{item}/{sub_item}/psi_final_after_oct.dat',16)
                 state = localTools.rotate_state(state,4,0,float(item))
                 cat_inFidelity = bestCat(state)
                 min_JTss = cat_inFidelity

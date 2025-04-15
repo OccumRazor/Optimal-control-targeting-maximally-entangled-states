@@ -1,4 +1,4 @@
-import os,matplotlib.pyplot as plt,localTools,numpy as np,J_T_local,csv
+import os,matplotlib.pyplot as plt,localTools,numpy as np,J_T_local,csv,read_write
 from scipy.interpolate import interp1d
 
 
@@ -184,7 +184,7 @@ def plt_rf_res(rf):
     JT = []
     phase = []
     for T in Tlist:
-        state = localTools.stateReader(f'{rf}{T}/0/psi_final_after_oct.dat',4)
+        state = read_write.stateReader(f'{rf}{T}/0/psi_final_after_oct.dat',2**4)
         state = localTools.rotate_state(state,4,0,T)
         JT_T,phase_T = J_T_local.bestCat_phase(state,False,True)
         JT.append(JT_T)
