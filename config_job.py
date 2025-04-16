@@ -1,8 +1,9 @@
-import read_write,numpy as np,localTools,re,qutip,Krotov_API,krotov,J_T_local,os
+import read_write,numpy as np,localTools,re,qutip,Krotov_API,krotov,J_T_local,os,propagation_method
 from functools import partial
 from pathlib import Path
 from collections import defaultdict
 from scipy.interpolate import interp1d
+from scipy.sparse.linalg import eigsh
 
 def sort_property(ipt_list):
     text_content = ''
@@ -46,10 +47,24 @@ def dict2string(ipt_dict):
 
 str2float_keys = ['oct_lambda_a','lambda_a','t_start','t_stop','t_rise','f_fall']
 
+def H_t(Hamiltonian,pulse_options,t):
+    assert isinstance(Hamiltonian,list) and len(Hamiltonian) >0
+    if isinstance(Hamiltonian[0],list):
+        Ht = Hamiltonian[0][1](t,pulse_options[Hamiltonian[0][1]]['args']) * Hamiltonian[0][0]
+    else:
+        Ht = Hamiltonian[0]
+    for H_i in Hamiltonian[1:]:
+        if isinstance(H_i,list):
+            Ht += H_i[1](t,pulse_options[H_i[1]]['args']) * H_i[0]
+        else:
+            Ht += H_i
+    return Ht
+
 class Propagation:
     def __init__(self,Hamiltonian,tlist,prop_method,initial_states,pulse_name,pulse_options = None):
         self.Hamiltonian = Hamiltonian
         self.tlist = tlist
+        self.tlist_long = localTools.half_step_tlist(self.tlist)
         self.prop_method = prop_method
         if isinstance(initial_states,list):
             self.n_states = len(initial_states)
@@ -58,21 +73,34 @@ class Propagation:
         self.initial_states = initial_states
         self.pulse_name = pulse_name
         self.pulse_options = pulse_options
+        self.c_ops = None
     
+    def add_dissipator(self,c_ops):
+        self.c_ops = c_ops
+
     def krotov_pulse_options(self):
         converted_options = {}
         for k,v in self.pulse_options.items():
-                converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
-                                        t_start=self.tlist[0], t_stop=self.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
+            converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
+                                    t_start=self.tlist[0], t_stop=self.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
         return converted_options
 
-    def propagate(self):
-        return 0
+    def propagate(self,prop_options: dict = {}):
+        psi_0 = self.initial_states
+        dt = self.tlist_long[1] - self.tlist_long[0]
+        for t in self.tlist_long:
+            Ht = H_t(self.Hamiltonian,self.pulse_options,t)
+            Ht = Ht.full()
+            eig_vals = eigsh(Ht,return_eigenvectors=False)
+            E_max = max(eig_vals)
+            E_min = min(eig_vals)
+            for i in range(self.n_states):
+                psi_0[i] = qutip.Qobj(propagation_method.Chebyshev(Ht,psi_0[i].full(),E_max,E_min,dt))
+        return psi_0
 
     def config(self,path,write = False):
         path_Path = Path(path)
         path_Path.mkdir(exist_ok=True,parents=True)
-        tlist_long = localTools.half_step_tlist(self.tlist)
         config_dict = {'prop':{'prop_method':self.prop_method},'tgrid':{'t_start':self.tlist[0],'t_stop':self.tlist[1],'nt':self.tlist[2]}}
         Hamiltonian_info = []
         pulse_info = []
@@ -81,7 +109,7 @@ class Propagation:
             if isinstance(self.Hamiltonian[i],list):
                 id_pulse_option = self.pulse_options[self.Hamiltonian[i][1]]
                 mat_text = read_write.matrix2text(self.Hamiltonian[i][0])
-                pulse_text = read_write.control2text(tlist_long,self.Hamiltonian[i][1](tlist_long,id_pulse_option['args']))
+                pulse_text = read_write.control2text(self.tlist_long,self.Hamiltonian[i][1](self.tlist_long,id_pulse_option['args']))
                 with open(path + f'{self.pulse_name}_{pulse_count}.dat','w') as pulse_file:
                     pulse_file.write(pulse_text)
                 Hamiltonian_info.append({'dim':self.Hamiltonian[i][0].shape[0],'filename':f'H{i}.dat','pulse_id':pulse_count})
@@ -116,6 +144,12 @@ class Propagation:
             with open(path + 'config', 'w') as config_file:
                 config_file.write(config_text)
         return config_dict
+
+    def update_control(self,new_controls):
+        for i in range(len(new_controls)):
+            cubicSpline_fit = interp1d(
+                self.tlist_long, new_controls[i], kind="cubic", fill_value="extrapolate")
+            self.pulse_options[self.Hamiltonian[i+1][1]]['args'] = {"fit_func": cubicSpline_fit}
 
 class Optimization:
     def __init__(self,prop: Propagation,opt_method,JT_conv,delta_JT_conv,iter_dat,iter_stop):
@@ -167,9 +201,8 @@ class Optimization:
             config_file.write(config_text)
     
     def write2runfolder(self,runfolder,opt_result):
-        tlist_long = localTools.half_step_tlist(self.prop.tlist)
         for i in range(len(opt_result.optimized_controls)):
-            control_text = read_write.control2text(tlist_long,opt_result.optimized_controls[i])
+            control_text = read_write.control2text(self.prop.tlist_long,opt_result.optimized_controls[i])
             with open(runfolder+f'pulse_oct_{i}.dat','w') as pulse_f:
                 pulse_f.write(control_text)
         state_text = read_write.state2text(opt_result.states[-1].full())
@@ -184,13 +217,12 @@ class Optimization:
         if self.prop.prop_method == 'cheby':propagator=Krotov_API.KROTOV_CHEBY
         elif self.prop.prop_method == 'expm':propagator=krotov.propagators.expm
         else:raise KeyError(f"Currently, only cheby and expm is supported for the propagation. Input prop_method: {self.prop.prop_method}")
-        tlist = localTools.half_step_tlist(self.prop.tlist)
         opt_functionals=J_T_local.functional_master(functional_name)
         objectives=[krotov.Objective(initial_state=self.prop.initial_states[i],target=self.target_states[i],H=self.prop.Hamiltonian) for i in range(self.prop.n_states)]
         krotov_pulse_options = self.prop.krotov_pulse_options()
         out_file = open(runfolder+self.oct_info['iter_dat'],'w')
         opt_result=krotov.optimize_pulses(
-                objectives,krotov_pulse_options,tlist,
+                objectives,krotov_pulse_options,self.prop.tlist_long,
                 propagator=propagator,
                 chi_constructor=opt_functionals[0],
                 info_hook=krotov.info_hooks.print_table(
@@ -295,7 +327,7 @@ def parse_config_with_subsections(file_path):
 
 
 
-def config_prop(path):
+def config_prop(path,zero_base = True):
     config = parse_config_with_subsections(f'{path}config')
     prop_method = config['prop']['main']['prop_method']
     tlist = [float(config['tgrid']['main']['t_start']),float(config['tgrid']['main']['t_stop']),int(config['tgrid']['main']['nt'])]
@@ -315,12 +347,11 @@ def config_prop(path):
             Ham_pulse_Table.append(Hamiltonian_info[i]['pulse_id'])
         else:
             Ham_pulse_Table.append(False)
-    for i in range(len(Hamiltonian_info)):
         for key in config['ham']['main'].keys():
             Hamiltonian_info[i][key] = config['ham']['main'][key]
-    Hamiltonian = [[qutip.Qobj(read_write.matrixReader(path+Hamiltonian_info[i]['filename'],int(Hamiltonian_info[i]['dim']))),lambda t,args:localTools.random_guess(t,args)
+    Hamiltonian = [[qutip.Qobj(read_write.matrixReader(path+Hamiltonian_info[i]['filename'],int(Hamiltonian_info[i]['dim']),zero_base)),lambda t,args:localTools.random_guess(t,args)
                     ] if 'pulse_id' in Hamiltonian_info[i].keys() else
-                    qutip.Qobj(read_write.matrixReader(path+Hamiltonian_info[i]['filename'],int(Hamiltonian_info[i]['dim']))
+                    qutip.Qobj(read_write.matrixReader(path+Hamiltonian_info[i]['filename'],int(Hamiltonian_info[i]['dim']),zero_base)
                     )for i in range(len(Hamiltonian_info))]
     pulse_options = {}
     for i in range(len(pulses_info)):
@@ -331,13 +362,13 @@ def config_prop(path):
     initial_states = []
     for i in range(len(config['psi']['subsections'])):
         if config['psi']['subsections'][i]['label'] == 'initial':
-            state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']))
+            state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']),zero_base)
             initial_states.append(qutip.Qobj(state))
     prop_obj = Propagation(Hamiltonian,tlist,prop_method,initial_states,'pulse_initial',pulse_options)
     return prop_obj,config
 
-def config_opt(path):
-    prop_obj,config = config_prop(path)
+def config_opt(path,zero_base = True):
+    prop_obj,config = config_prop(path,zero_base)
     opt_info = config['oct']['main']
     opt_method = opt_info['oct_method']
     JT_conv = float(opt_info['JT_conv'])
@@ -348,14 +379,14 @@ def config_opt(path):
     target_states = []
     for i in range(len(config['psi']['subsections'])):
         if config['psi']['subsections'][i]['label'] == 'final':
-            state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']))
+            state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']),zero_base)
             target_states.append(qutip.Qobj(state))
     if len(target_states):
         opt_obj.set_target_states(target_states)
     if 'observables' in config.keys():
         observables = []
         for i in range(len(config['observables']['subsections'])):
-            observable = read_write.matrixReader(path+config['observables']['subsections'][i]['filename'],int(config['ham']['main']['dim']))
+            observable = read_write.matrixReader(path+config['observables']['subsections'][i]['filename'],int(config['ham']['main']['dim']),zero_base)
         observables.append(qutip.Qobj(observable))
         opt_obj.set_observables(observables)
     return opt_obj,config

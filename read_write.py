@@ -74,14 +74,16 @@ def control2text(tlist,amplitude):
             text_content += t_formatted + space4_symbol + amp_formatted + '\n'
     return text_content
 
-def stateReader(file_name, max_dim):
+def stateReader(file_name, max_dim, zero_base = True):
     data = np.loadtxt(file_name, usecols=(0, 1))
     if len(data.shape) == 1:
         ids = int(data[0])
+        if not zero_base: ids -= 1
         vals = data[1]
         try:
             imags = np.loadtxt(file_name, usecols=(2))
-            vals += 1j * imags[0]
+            vals = np.complex128(vals)
+            vals += 1j * imags
             state = np.zeros([max_dim, 1], dtype=np.complex128)
         except Exception:
             state = np.zeros([max_dim, 1])
@@ -89,11 +91,13 @@ def stateReader(file_name, max_dim):
         return state
     ids, vals = np.split(np.loadtxt(file_name, usecols=(0, 1)), 2, axis=1)
     ids = ids.T[0]
-    ids = [int(ids[i] - 1) for i in range(len(ids))]
+    if not zero_base:ids = [int(ids[i] - 1) for i in range(len(ids))]
+    else:ids = [int(ids[i]) for i in range(len(ids))]
     vals = vals.T[0]
     try:
-        imags = np.split(np.loadtxt(file_name, usecols=(2)), 1, axis=1)
-        vals += 1j * imags.T[0]
+        imags = np.loadtxt(file_name, usecols=(2))
+        vals = np.complex128(vals)
+        vals += 1j * imags
         state = np.zeros([max_dim, 1], dtype=np.complex128)
     except Exception:
         state = np.zeros([max_dim, 1])
@@ -101,11 +105,15 @@ def stateReader(file_name, max_dim):
         state[ids[i]][0] += vals[i]
     return state
 
-def matrixReader(file_name, max_dim):
+def matrixReader(file_name, max_dim, zero_base = True):
+    print(f'matrixReader zero_base: {zero_base}')
     data = np.loadtxt(file_name, usecols=(0, 1))
     if len(data.shape) == 1:
         rows = int(data[0])
         cols = int(data[1])
+        if not zero_base: 
+            rows -= 1
+            cols -= 1
         try:
             vals = np.loadtxt(file_name, usecols=(2, 3))
             vals = vals[0] + 1j * vals[1]
@@ -126,8 +134,12 @@ def matrixReader(file_name, max_dim):
         mat = np.zeros([max_dim, max_dim])
     rows = rows.T[0]
     cols = cols.T[0]
-    rows = [int(rows[i] - 1) for i in range(len(rows))]
-    cols = [int(cols[i] - 1) for i in range(len(cols))]
+    if not zero_base:
+        rows = [int(rows[i] - 1) for i in range(len(rows))]
+        cols = [int(cols[i] - 1) for i in range(len(cols))]
+    else:
+        rows = [int(rows[i]) for i in range(len(rows))]
+        cols = [int(cols[i]) for i in range(len(cols))]
     for i in range(len(rows)):
         mat[rows[i]][cols[i]] += vals[i]
     return mat
@@ -136,8 +148,10 @@ def controlReader(file_name):
     tlist, control = np.split(np.loadtxt(file_name, usecols=(0, 1)), 2, axis=1)
     tlist = tlist.T[0]
     control = control.T[0]
+    return tlist,control
     try:
-        control_imag = np.split(np.loadtxt(file_name, usecols=(2)), 1, axis=1)
-        control += 1j * control_imag.T[0]
+        control_imag = np.loadtxt(file_name, usecols=(2))
+        control = np.complex128(control)
+        control += 1j * control_imag
         return tlist,control
     except Exception:return tlist,control
