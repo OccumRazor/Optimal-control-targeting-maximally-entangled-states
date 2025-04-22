@@ -106,7 +106,6 @@ def stateReader(file_name, max_dim, zero_base = True):
     return state
 
 def matrixReader(file_name, max_dim, zero_base = True):
-    print(f'matrixReader zero_base: {zero_base}')
     data = np.loadtxt(file_name, usecols=(0, 1))
     if len(data.shape) == 1:
         rows = int(data[0])

@@ -81,11 +81,11 @@ num_qubit = 4
 #canoLabel = '1+'
 #Krotov_call(4,T,canoLabel,0,f'control_source/{T}/','pulse_initial')
 #Krotov_call(4,T,canoLabel,0,f'control_source/{T}/','pulse_oct')
-opt_obj,config = config_job.config_opt('control_source/20.75/',zero_base = False)
-opt_obj.config('control_source/rf111/')
+
+#opt_obj.config('control_source/rf112/')
 #print(opt_obj.prop.tlist_long)
 #print(opt_obj.prop.tlist)
-opt_obj.Krotov_run('control_source/rf111/','inFidelity')
+#opt_obj.Krotov_run('control_source/rf112/','inFidelity')
 #psi_f = opt_obj.prop.propagate()
 #print(psi_f)
 #print(J_T_local.inFidelity(psi_f[0],opt_obj.target_states[0]))

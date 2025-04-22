@@ -365,6 +365,7 @@ def config_prop(path,zero_base = True):
             state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']),zero_base)
             initial_states.append(qutip.Qobj(state))
     prop_obj = Propagation(Hamiltonian,tlist,prop_method,initial_states,'pulse_initial',pulse_options)
+    prop_obj.tlist_long = detupleTlist
     return prop_obj,config
 
 def config_opt(path,zero_base = True):

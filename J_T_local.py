@@ -56,9 +56,14 @@ def inFidelity(state,ref=False):
 def functional_master(functional_name):
     if functional_name == 'inFidelity' or 'JT_ss':
         return [chis_inFidelity,J_T_inFidelity,inFidelity]
+    if functional_name == 'XN':
+        return [chis_XN,J_T_XN,J_T_XN]
     #surnames = ["chis_", "J_T_", ""]
     #functional_names = [surname + functional_name for surname in surnames]
     #return [eval(functional) for functional in functional_names]
+
+def J_T_opVarN(fw_states_T,objectives=None,tau_vals=None,**kwargs):
+    return opVarN(fw_states_T[0].full())
 
 def opVar(mat,state):
     mat_sqr = np.matmul(mat,mat)
@@ -87,9 +92,31 @@ def mat_N(num_qubit,N_factor,shuffle_key=False):
 
 def opVarX(state,num_qubit,X_factor = 1):
     return opVar(mat_X(num_qubit,X_factor),state)
-
 def opVarN(state,num_qubit,N_factor = 1,shuffle_key=False):
     return opVar(mat_N(num_qubit,N_factor,shuffle_key),state)
+
+def chis_XN(fw_states_T, objectives=None, tau_vals=None):
+    state=fw_states_T[0].full()
+    num_qubit=int(math.log(len(state),2))
+    rho=localTools.densityMatrix(state)
+    X_factor = 1
+    N_factor = 1.5
+    N_Operator=mat_N(num_qubit,N_factor)
+    N2=np.matmul(N_Operator,N_Operator)
+    N_exp=np.trace(np.matmul(N_Operator,rho))
+    X_Operator=mat_N(num_qubit,X_factor)
+    X2 = np.eye(2**num_qubit)
+    X_exp=np.trace(np.matmul(X_Operator,rho))
+    chisKet=0.5*np.matmul(2*N_exp*N_Operator-N2,state)
+    chisKet+=0.5*np.matmul(2*X_exp*X_Operator-X2,state)
+    return [qutip.Qobj(chisKet)]
+
+def J_T_XN(fw_states_T,objectives,tau_vals=None,**kwargs):
+    state=fw_states_T[0].full()
+    num_qubit = int(np.log2(len(state)))
+    X_factor = 1
+    N_factor = 1.5
+    return 0.5 * opVar(mat_X(num_qubit,X_factor),state) + 0.5 *opVar(mat_N(num_qubit,N_factor),state)
 
 def bestCat(state,min_key=True):
     num_qubit=int(math.log(len(state),2))
