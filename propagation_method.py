@@ -28,14 +28,14 @@ def Bessel_function(num,k,lower_bound=1e-17):
         coefficient += coe_amp
     return coefficient
 
-def Chebyshev(herm_mat,initial_state,E_max,E_min,dt,backwards = False):
+def Chebyshev(herm_mat,initial_state,E_max,E_min,dt,backward = False):
     if isinstance(herm_mat,list):herm_mat=np.array(herm_mat)
     Delta = E_max - E_min
     R = Delta  * dt / 2
     max_eval = int(4 * np.abs(R))
     if max_eval < 40: max_eval = 40
     if max_eval > 500: raise ValueError(f"variable max_eval {max_eval} is larger than 500, decrease dt to decrease max_eval.")
-    if backwards == False: # forward propagation 
+    if backward == False: # forward propagation 
         p0 = -1j
     else:
         p0 = 1j

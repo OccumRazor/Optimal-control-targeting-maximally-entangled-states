@@ -1,6 +1,8 @@
 import numpy as np,math,qutip,random,copy,os,localTools,scipy,read_write
 
 def tau(state,ref):
+    if isinstance(state,qutip.Qobj):state = state.full()
+    if isinstance(ref,qutip.Qobj):ref=ref.full()
     res=0j
     for i in range(len(state)):
         res+=state[i]*np.conjugate(ref[i])

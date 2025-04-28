@@ -355,8 +355,6 @@ def Hamiltonian_Spin_Chain_NR(num_qubit, **kwargs):
     return H0, HC
 
 def Hamiltonian_Spin_Chain(num_qubit, **kwargs):
-    # OC here refers to operator controllable, https://arxiv.org/abs/2212.04828
-    # intrinsic frequencies comes from IBM_PERTH, https://quantum-computing.ibm.com/services/resources?tab=systems&system=ibm_perth
     if num_qubit > 7:
         raise ValueError("number of qubit should be no larger than 7.")
     # 2pi/J in (51.6,87.0)
