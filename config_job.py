@@ -120,6 +120,7 @@ class Propagation:
                     for i in range(self.n_states):
                         psi_next = np.matmul(self.Hamiltonian[k][0].full(),psi_0[i])
                         control_k_update_amp += np.imag(np.inner(chis[i],np.reshape(psi_next,(state_size))))
+                control_k_update_amp *= self.Krotov_pulse_ops[self.Hamiltonian[k][1]]['update_shape'](t) / self.Krotov_pulse_ops[self.Hamiltonian[k][1]]['lambda_a']
                 update_table[self.Hamiltonian[k][1]] = control_k_update_amp
                 update_return.append(control_k_update_amp+self.Hamiltonian[k][1](t,self.Krotov_pulse_ops[self.Hamiltonian[k][1]]['args']))
         Ht = H_t(self.Hamiltonian,t,self.pulse_options,update_table)

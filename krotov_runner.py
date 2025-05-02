@@ -37,7 +37,7 @@ def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
     t_stop=T
     t_rise=1
     t_fall=1
-    lambda_a=10
+    lambda_a=0.05
     H=localTools.Hamiltonian(num_qubit)
     shapes = [localTools.S]*num_qubit
     num_steps = 801
@@ -54,8 +54,8 @@ def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
     if JT == 0:functional_name = 'inFidelity'
     elif JT == 1:functional_name = 'XN'
     opt_functionals=J_T_local.functional_master(functional_name)
-    #propagator=krotov.propagators.expm
-    propagator=Krotov_API.KROTOV_CHEBY
+    propagator=krotov.propagators.expm
+    #propagator=Krotov_API.KROTOV_CHEBY
     opt_result=krotov.optimize_pulses(
             objectives,pulse_options,tlist,
             propagator=propagator,
@@ -68,7 +68,7 @@ def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
                 krotov.convergence.value_below(8e-3, name='J_T'),
                 krotov.convergence.delta_below(3e-7),
                 krotov.convergence.check_monotonic_error),
-            iter_stop=0,store_all_pulses=True)
+            iter_stop=1000,store_all_pulses=True)
     return opt_result
 
 num_qubit = 4
@@ -77,9 +77,9 @@ num_qubit = 4
 #print(H)
 #Krotov_config_runfolder('control_source/rf2/',[0,20,801])
 #Krotov_run('control_source/rf2/')
-#T = 20.75
-#canoLabel = '1+'
-#Krotov_call(4,T,canoLabel,0,f'control_source/{T}/','pulse_initial')
+T = 20.75
+canoLabel = '6+'
+Krotov_call(4,T,canoLabel,0)
 #Krotov_call(4,T,canoLabel,0,f'control_source/{T}/','pulse_oct')
 
 #opt_obj.config('control_source/rf112/')

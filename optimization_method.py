@@ -1,6 +1,6 @@
 import numpy as np,config_job,krotov,matplotlib.pyplot as plt,J_T_local
 from functools import partial
-opt_obj,config = config_job.config_opt('control_source/rf1/')
+opt_obj,config = config_job.config_opt('control_source/rf2/')
 
 def Krotov_forward():
     psi_f = 0
@@ -27,12 +27,13 @@ def Krotov_optimization(opt_obj:config_job.Optimization):
     pulse_options = {}
     for k,v in opt_obj.prop.pulse_options.items():
         pulse_options[k] = {'oct_lambda_a':v['oct_lambda_a'],'shape_function':partial(krotov.shapes.flattop,t_start=opt_obj.prop.tlist[0], t_stop=opt_obj.prop.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall']), func='blackman')}
-    for iters in range(10):
+    for iters in range(1000):
         chis_t = opt_obj.prop.propagate(True,True,False,opt_obj.target_states)
         psi_T,new_controls = opt_obj.prop.propagate(False,False,True,chis_t)
-        JT_iter.append(JT_ss(psi_T,opt_obj.target_states))
-        print(f'{iters}      {JT_iter[-1]}')
-        opt_obj.prop.update_control(new_controls)
+        if JT_ss(psi_T,opt_obj.target_states) < JT_iter[-1]:
+            JT_iter.append(JT_ss(psi_T,opt_obj.target_states))
+            print(f'{iters}      {JT_iter[-1]}')
+            opt_obj.prop.update_control(new_controls)
     return 0
 
 Krotov_optimization(opt_obj)
