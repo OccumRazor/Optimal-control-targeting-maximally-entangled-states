@@ -240,6 +240,7 @@ def write_pulse(tlist,pulse,file_title):
             log_f.write(f'{t:.16e}    {amp:.16e}\n')
 
 def densityMatrix(state):
+    #print(state)
     if not isinstanceVector(state):
         return state
     if isinstance(state[0], list) or isinstance(state[0], np.ndarray):

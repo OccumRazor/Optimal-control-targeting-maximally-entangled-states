@@ -46,7 +46,7 @@ def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
     tlist=np.linspace(0,T,num_steps)
     #tlist = tlist[:3]
     pulse_options={}
-    if not control_source:control_source = 5
+    if not control_source:control_source = 1
     control_args = localTools.control_generator(num_qubit,control_source,T,header)
     for i in range(1,len(H)):
         pulse_options[H[i][1]]=dict(lambda_a=lambda_a,update_shape=partial(shapes[i-1],t_start=t_start, t_stop=t_stop, t_rise=t_rise, t_fall=t_fall),args=control_args[i-1])
@@ -54,8 +54,8 @@ def Krotov_call(num_qubit,T,canoLabel,JT,control_source = None, header = None):
     if JT == 0:functional_name = 'inFidelity'
     elif JT == 1:functional_name = 'XN'
     opt_functionals=J_T_local.functional_master(functional_name)
-    propagator=krotov.propagators.expm
-    #propagator=Krotov_API.KROTOV_CHEBY
+    #propagator=krotov.propagators.expm
+    propagator=Krotov_API.KROTOV_CHEBY
     opt_result=krotov.optimize_pulses(
             objectives,pulse_options,tlist,
             propagator=propagator,
