@@ -1,6 +1,6 @@
 from . import(
     autoXN,
-    config_job,
+    config_task,
     draw_all,
     J_T_local,
     JT_XN_fig,
@@ -8,14 +8,14 @@ from . import(
     krotov_runner,
     localTools,
     propagation_method,
-    q_obj,
     QDYN_config,
     read_write,
     refine_XN,
     store_best,
+    task_obj,
 )
 
-from .config_job import Propagation,Optimization
+from .config_task import Propagation,Optimization
 
 __all__ = [
     

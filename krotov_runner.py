@@ -1,4 +1,4 @@
-import krotov,numpy as np,J_T_local,localTools,qutip,config_job,Krotov_API
+import krotov,numpy as np,J_T_local,localTools,qutip,config_task,Krotov_API
 from functools import partial
 
 def random_guess(t,control_args):
@@ -16,15 +16,15 @@ def Krotov_config_runfolder(runfolder,tlist):
     control_args = localTools.control_generator(num_qubit,control_source,tlist[1])
     for i in range(1,len(H)):
         pulse_options[H[i][1]]=dict(oct_lambda_a = 0.1, t_rise = 1, t_fall = 1, args=control_args[i-1])
-    prop = config_job.Propagation(H,tlist,'cheby',initial_states,'pulse_initial',pulse_options)
-    oct = config_job.Optimization(prop,'krotov',JT_conv=0.1,delta_JT_conv=1e-4,iter_dat='oct_iter.dat',iter_stop=2)
+    prop = config_task.Propagation(H,tlist,'cheby',initial_states,'pulse_initial',pulse_options)
+    oct = config_task.Optimization(prop,'krotov',JT_conv=0.1,delta_JT_conv=1e-4,iter_dat='oct_iter.dat',iter_stop=2)
     target_states = [qutip.Qobj(localTools.rotate_state(localTools.canoGHZGen(num_qubit,'6+'), num_qubit, 1, tlist[1]))]
     oct.set_target_states(target_states)
     oct.config(runfolder)
     #oct.Krotov_run('inFidelity')
 
 def Krotov_run(runfolder):
-    opt_obj,config = config_job.config_opt(runfolder)
+    opt_obj,config = config_task.config_opt(runfolder)
     psi_f = opt_obj.prop.propagate()
     print(J_T_local.inFidelity(psi_f[0],opt_obj.target_states[0]))
     opt_result = opt_obj.Krotov_run(runfolder,'inFidelity')

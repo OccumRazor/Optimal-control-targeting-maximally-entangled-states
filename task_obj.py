@@ -1,7 +1,6 @@
-import read_write,numpy as np,localTools,re,qutip,Krotov_API,krotov,J_T_local,os,propagation_method,copy
+import read_write,numpy as np,localTools,re,qutip,Krotov_API,krotov,J_T_local,propagation_method,copy,matplotlib.pyplot as plt
 from functools import partial
 from pathlib import Path
-from collections import defaultdict
 from scipy.interpolate import interp1d
 from scipy.sparse.linalg import eigsh
 
@@ -45,10 +44,6 @@ def dict2string(ipt_dict):
             raise KeyError('Anyway the format of the input dictionary does not match.')
     return text_content
 
-str2float_keys = ['oct_lambda_a','lambda_a','t_start','t_stop','t_rise','f_fall']
-
-import matplotlib.pyplot as plt
-
 def H_t(Hamiltonian,t,pulse_options,update_table=None):
     assert isinstance(Hamiltonian,list) and len(Hamiltonian) > 0
     if isinstance(Hamiltonian[0],list):
@@ -72,10 +67,7 @@ class Propagation:
         self.tlist = tlist
         self.tlist_long = localTools.half_step_tlist(self.tlist)
         self.prop_method = prop_method
-        if isinstance(initial_states,list):
-            self.n_states = len(initial_states)
-        else:
-            self.n_states = 1
+        self.n_states = len(initial_states)
         self.initial_states = initial_states
         self.pulse_name = pulse_name
         self.pulse_options = pulse_options
@@ -87,10 +79,16 @@ class Propagation:
 
     def krotov_pulse_options(self):
         converted_options = {}
-        for k,v in self.pulse_options.items():
-            converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
-                                    t_start=0, t_stop=self.tlist[0], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
-            self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
+        if len(self.tlist) == 2:
+            for k,v in self.pulse_options.items():
+                converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
+                                        t_start=0, t_stop=self.tlist[0], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
+                self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
+        if len(self.tlist) == 3:
+            for k,v in self.pulse_options.items():
+                converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
+                                        t_start=self.tlist[0], t_stop=self.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
+                self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
         self.Krotov_pulse_ops =  converted_options
 
     def propagate_sg(self,dt,t,psi_0,backwards=False):
@@ -237,12 +235,32 @@ class Optimization:
             'iter_stop':iter_stop}
         self.target_states = None
         self.observables = None
+        self.stored_controls = []
+        self.initial_controls = []
 
     def set_target_states(self,target_states):
         self.target_states = target_states
     
     def set_observables(self,observables):
         self.observables = observables
+
+    def store_initial_controls(self):
+        initial_controls = []
+        for Hi in self.prop.Hamiltonian:
+            if isinstance(Hi,list):
+                initial_controls.append(
+                    Hi[1](self.prop.tlist_long,self.prop.pulse_options[Hi[1]]['args'])
+                )
+        self.initial_controls.append(initial_controls)
+
+    def update_control(self,new_controls,store_key = False):
+        if store_key == 'all':
+            self.stored_controls.append(new_controls)
+        if store_key == 'last':
+            if len(self.stored_controls) < 2:
+                self.stored_controls.append(new_controls)
+            else:self.stored_controls = [self.stored_controls[-1],new_controls]
+        self.prop.update_control(new_controls)
 
     def config(self,path):
         path_Path = Path(path)
@@ -315,158 +333,83 @@ class Optimization:
         self.write2runfolder(runfolder,opt_result)
         return opt_result
 
-def combine_relevant_lines(sentence_list):
-    combined_lines = [sentence_list[0]+'\n']
-    max_line = len(sentence_list)
-    current_id = 1
-    while current_id < max_line - 1:
-        if sentence_list[current_id] == '':
-            current_id += 1
-        else:
-            relevant_info = ''
-            while sentence_list[current_id] != '':
-                relevant_info += sentence_list[current_id] + '\n'
-                current_id += 1
-            combined_lines.append(relevant_info)
-    return combined_lines
 
-def combine_psi_args(sentence_list):
-    combined_lines = ''
-    psi_start = 0
-    psi_end = len(sentence_list) - 1
-    while 'psi' not in sentence_list[psi_start]:
-        psi_start += 1
-    while 'psi' not in sentence_list[psi_end]:
-        psi_end -= 1
-    for i in range(psi_start):
-        combined_lines += sentence_list[i] + '\n'
-    psi_sentence = ''
-    for i in range(psi_start,psi_end + 1):
-        psi_sentence += sentence_list[i]
-    psi_sentence = ''.join(psi_sentence.split('psi:'))
-    psi_sentence = ''.join(psi_sentence.split('\n'))
-    psi_sentence = 'psi:' + '\n*'.join(psi_sentence.split('*')) + '\n'
-    combined_lines += psi_sentence + '\n'
-    for i in range(psi_end + 1,len(sentence_list)):
-        combined_lines += sentence_list[i] + '\n'
-    return combined_lines
+    def Krotov_optimization(self,chi_constructor,JT,XN=None):
+        self.store_initial_controls()
+        JT_iter = []
+        psi_T = self.prop.propagate()
+        #print(psi_T)
+        if XN:JT_iter.append(J_T_local.JT_var(psi_T,self.observables))
+        else:JT_iter.append(JT(psi_T,self.target_states))
+        print(f'iter    JT,{' ' * 16}    ga_int')
+        print(f'0      {JT_iter[-1]}, 0')
+        pulse_options = {}
+        for k,v in self.prop.pulse_options.items():
+            pulse_options[k] = {'oct_lambda_a':v['oct_lambda_a'],'shape_function':partial(krotov.shapes.flattop,t_start=self.prop.tlist[0], t_stop=self.prop.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall']), func='blackman')}
+        for iters in range(1,self.oct_info['iter_stop'] + 1):
+            if XN:chis_T=J_T_local.chis_var(psi_T,self.observables)
+            else:chis_T = chi_constructor(psi_T,self.target_states)
+            chis_t = self.prop.propagate(True,True,False,prop_options={'initial_states':chis_T})
+            chis_t.reverse()
+            psi_T,new_controls,ga_int = self.prop.propagate(False,False,True,chis_t)
+            if XN:
+                JT_iter.append(J_T_local.JT_var(psi_T,self.observables))
+                print(J_T_local.cat_res_2(psi_T[0].full(),self.prop.tlist[1],'0-'))
+            else:JT_iter.append(JT(psi_T,self.target_states))
+            print(f'{iters}      {JT_iter[-1]}    {ga_int}')
+            self.update_control(new_controls)
+            if JT_iter[-1] < 1e-3 or (JT_iter[-2] - JT_iter[-1])/JT_iter[-1] < 1e-3:
+                #print(f'stop condition met (JT_iter[-1] < 1e-3: {JT_iter[-1] < 1e-3}, (JT_iter[-2] - JT_iter[-1])/JT_iter[-1] < 1e-3): {(JT_iter[-2] - JT_iter[-1])/JT_iter[-1] < 1e-3}, break')
+                break
+        return JT_iter
 
-def read_config(file_name):
-    config_f = open(file_name,'r')
-    config_f = config_f.read().split('\n')
-    config_f = combine_relevant_lines(config_f)
-    n_psi = ''.join(config_f).count('psi:')
-    if n_psi>1:
-        config_f = combine_psi_args(config_f)
-        with open(file_name,'w') as store_f:
-            store_f.write(config_f)
-    return 0
+    def GRAPE_update_pulse(self,psi_t,lambda_t,Hamiltonian,epsilon,tlist,n_states,pulse_options):
+        lambda_t.reverse()
+        for i in range(len(lambda_t)):
+            for k in range(n_states):
+                psi_t[i][k] = localTools.densityMatrix(psi_t[i][k])
+                lambda_t[i][k] = localTools.densityMatrix(lambda_t[i][k])
+        new_pulses = []
+        dt = tlist[1] - tlist[0]
+        ga = []
+        for i in range(len(Hamiltonian)):
+            if isinstance(Hamiltonian[i],list):
+                id_pulse = []
+                id_ga = 0
+                if isinstance(Hamiltonian[i][0],qutip.Qobj):H_i = Hamiltonian[i][0].full()
+                else:H_i = Hamiltonian[i][0]
+                for j in range(len(tlist)):
+                    Delta_it = 0
+                    for k in range(n_states):
+                        Delta_it += np.real(-1j * dt * np.trace(np.matmul(lambda_t[j][k],
+                                    np.matmul(H_i,psi_t[j][k])-np.matmul(psi_t[j][k],H_i))))
+                    id_pulse.append(Hamiltonian[i][1](tlist[j],pulse_options[Hamiltonian[i][1]]['args'])-pulse_options[Hamiltonian[i][1]]['update_shape'](tlist[j])*epsilon*Delta_it)
+                    id_ga += np.abs(epsilon*Delta_it)
+                new_pulses.append(id_pulse)
+                ga.append(id_ga)
+        return new_pulses,id_ga
 
-def parse_config_with_subsections(file_path):
-    config = defaultdict(lambda: {"main": [], "subsections": []})
-    current_section = None
-    current_subsection = None
-    read_config(file_path)
-    with open(file_path, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if not line or line.startswith('#'):  # Skip empty lines and comments
-                continue
-            # Check if the line is a new section (e.g., "tgrid:", "prop:")
-            section_match = re.match(r'^(\w+):', line)
-            if section_match:
-                current_section = section_match.group(1)
-                config[current_section] = {"main": {}, "subsections": []}
-                current_subsection = None
-                line = line[len(current_section)+1:].strip()  # Remove section name
-            # Check if the line is a continuation (using "&")
-            if '&' in line:
-                line = line.replace('&', '').strip()
-            # If the line starts with '*', it's a new subsection
-            if line.startswith('*'):
-                current_subsection = {}
-                config[current_section]["subsections"].append(current_subsection)
-                line = line[1:].strip()  # Remove '*' from the start
-            # Split key-value pairs separated by commas
-            pairs = [pair.strip() for pair in line.split(',')]
-            for pair in pairs:
-                if '=' in pair:
-                    key, value = pair.split('=', 1)
-                    key, value = key.strip(), value.strip()
-                    # If in a subsection, add to subsection; else add to main section
-                    if current_subsection is not None:
-                        current_subsection[key] = value
-                    else:
-                        config[current_section]["main"].update({key: value})
-    return config
-
-
-
-def config_prop(path,zero_base = True):
-    config = parse_config_with_subsections(f'{path}config')
-    prop_method = config['prop']['main']['prop_method']
-    tlist = [float(config['tgrid']['main']['t_start']),float(config['tgrid']['main']['t_stop']),int(config['tgrid']['main']['nt'])]
-    pulses_info = [config['pulse']['subsections'][i] for i in range(len(config['pulse']['subsections']))]
-    for i in range(len(pulses_info)):
-        for key in config['pulse']['main'].keys():
-            pulses_info[i][key] = config['pulse']['main'][key]
-        detupleTlist, detupleGuess = read_write.controlReader(
-                path + pulses_info[i]['filename'])
-        cubicSpline_fit = interp1d(
-            detupleTlist, detupleGuess, kind="cubic", fill_value="extrapolate")
-        pulses_info[i]['args'] = {"fit_func": cubicSpline_fit}
-    Hamiltonian_info = [config['ham']['subsections'][i] for i in range(len(config['ham']['subsections']))]
-    Ham_pulse_Table = []
-    for i in range(len(Hamiltonian_info)):
-        if 'pulse_id' in Hamiltonian_info[i].keys():
-            Ham_pulse_Table.append(Hamiltonian_info[i]['pulse_id'])
-        else:
-            Ham_pulse_Table.append(False)
-        for key in config['ham']['main'].keys():
-            Hamiltonian_info[i][key] = config['ham']['main'][key]
-    Hamiltonian = [[qutip.Qobj(read_write.matrixReader(path+Hamiltonian_info[i]['filename'],int(Hamiltonian_info[i]['dim']),zero_base)),lambda t,args:localTools.random_guess(t,args)
-                    ] if 'pulse_id' in Hamiltonian_info[i].keys() else
-                    qutip.Qobj(read_write.matrixReader(path+Hamiltonian_info[i]['filename'],int(Hamiltonian_info[i]['dim']),zero_base)
-                    )for i in range(len(Hamiltonian_info))]
-    pulse_options = {}
-    for i in range(len(pulses_info)):
-        pulse_id = pulses_info[i]['pulse_id']
-        pulses_info[i].pop('pulse_id')
-        pulses_info[i].pop('filename')
-        pulse_options[Hamiltonian[Ham_pulse_Table.index(pulse_id)][1]] = pulses_info[i]
-    initial_states = []
-    for i in range(len(config['psi']['subsections'])):
-        if config['psi']['subsections'][i]['label'] == 'initial':
-            state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']),zero_base)
-            initial_states.append(qutip.Qobj(state))
-    prop_obj = Propagation(Hamiltonian,tlist,prop_method,initial_states,'pulse_initial',pulse_options)
-    prop_obj.tlist_long = detupleTlist
-    return prop_obj,config
-
-def config_opt(path,zero_base = True):
-    prop_obj,config = config_prop(path,zero_base)
-    opt_info = config['oct']['main']
-    opt_method = opt_info['oct_method']
-    JT_conv = float(opt_info['JT_conv'])
-    delta_JT_conv = float(opt_info['delta_JT_conv'])
-    iter_dat = opt_info['iter_dat']
-    iter_stop = int(opt_info['iter_stop'])
-    opt_obj = Optimization(prop_obj,opt_method,JT_conv,delta_JT_conv,iter_dat,iter_stop)
-    target_states = []
-    for i in range(len(config['psi']['subsections'])):
-        if config['psi']['subsections'][i]['label'] == 'final':
-            state = read_write.stateReader(path+config['psi']['subsections'][i]['filename'],int(config['ham']['main']['dim']),zero_base)
-            target_states.append(qutip.Qobj(state))
-    if len(target_states):
-        opt_obj.set_target_states(target_states)
-    if 'observables' in config.keys():
-        observables = []
-        for i in range(len(config['observables']['subsections'])):
-            observable = read_write.matrixReader(path+config['observables']['subsections'][i]['filename'],int(config['ham']['main']['dim']),zero_base)
-        observables.append(qutip.Qobj(observable))
-        opt_obj.set_observables(observables)
-    return opt_obj,config
-
-#print(parse_config_with_subsections(f'control_source/21.0/config'))
-#config_opt('control_source/rf0/')
-#config_task(f'control_source/21.0/')
+    def GRAPE(self,target_states,epsilon,iter_stop,JT):
+        self.store_initial_controls()
+        JT_iter = []
+        n_states = len(target_states)
+        print(target_states)
+        for i in range(iter_stop):
+            psi_t = self.prop.propagate(False,True)
+            JT_iter.append(JT(psi_t[-1],target_states))
+            if i:print(f'iter {i}: {JT_iter[-1]}, ga_int: {ga}')
+            else:print(f'iter {i}: {JT_iter[-1]}')
+            lambda_t = self.prop.propagate(True,True,prop_options={'initial_states':target_states})
+            new_pulses,ga = self.GRAPE_update_pulse(psi_t,lambda_t,self.prop.Hamiltonian,epsilon,self.prop.tlist_long,n_states,self.prop.pulse_options)
+            self.update_control(new_pulses)
+            if i > 1:
+                if JT_iter[-1] > 1 - 1e-3 or (JT_iter[-1] - JT_iter[-2])/JT_iter[-1] < 1e-3:
+                    print(f'stop condition met (JT_iter[-1] > 1 - 1e-3: {JT_iter[-1] > 1 - 1e-3}, (JT_iter[-2] - JT_iter[-1])/JT_iter[-1] < 1e-3): {(JT_iter[-2] - JT_iter[-1])/JT_iter[-1] < 1e-3}, break')
+                    break
+        self.prop.plot_pulses()
+        psi_T = self.prop.propagate(False,False)
+        JT_iter.append(JT(psi_T,target_states))
+        print(f'iter {i}: {JT_iter[-1]}, ga_int: {ga}')
+        print(psi_T)
+        plt.plot(JT_iter)
+        plt.show()

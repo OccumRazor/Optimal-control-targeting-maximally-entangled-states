@@ -64,6 +64,48 @@ def functional_master(functional_name):
     #functional_names = [surname + functional_name for surname in surnames]
     #return [eval(functional) for functional in functional_names]
 
+def chis_XN(fw_states_T, objectives=None, tau_vals=None):
+    state=fw_states_T[0].full()
+    num_qubit=int(math.log(len(state),2))
+    rho=localTools.densityMatrix(state)
+    X_factor = 1
+    N_factor = 1.5
+    N_Operator=mat_N(num_qubit,N_factor)
+    N2=np.matmul(N_Operator,N_Operator)
+    N_exp=np.trace(np.matmul(N_Operator,rho))
+    X_Operator=mat_N(num_qubit,X_factor)
+    X2 = np.eye(2**num_qubit)
+    X_exp=np.trace(np.matmul(X_Operator,rho))
+    chisKet=0.5*np.matmul(2*N_exp*N_Operator-N2,state)
+    chisKet+=0.5*np.matmul(2*X_exp*X_Operator-X2,state)
+    return [qutip.Qobj(chisKet)]
+
+def chis_var(psi_Ts,operators):
+    op_sqs = []
+    for op in operators:
+        op_sqs.append(np.matmul(op,op))
+    states=[psi_Ts[i].full() for i in range(len(psi_Ts))]
+    chis_Kets = []
+    for state in states:
+        chis_Ket = np.zeros([len(state),1],dtype=np.complex128)
+        state_dm = localTools.densityMatrix(state)
+        for op,op_sq in zip(operators,op_sqs):
+            op_exp = np.trace(np.matmul(state_dm,op))
+            chis_Ket += 0.5 * np.matmul(2*op_exp*op-op_sq,state)
+        chis_Kets.append(qutip.Qobj(chis_Ket))
+    return chis_Kets
+
+def JT_var(psi_Ts,operators):
+    op_sqs = []
+    for op in operators:
+        op_sqs.append(np.matmul(op,op))
+    JT_val = 0
+    for psi_T in psi_Ts:
+        state_dm = localTools.densityMatrix(psi_T.full())
+        for op,op_sq in zip(operators,op_sqs):
+            JT_val += np.real(np.trace(np.matmul(state_dm,op_sq))-np.trace(np.matmul(state_dm,op))**2)
+    return JT_val / len(operators) / len(psi_Ts)
+
 def J_T_opVarN(fw_states_T,objectives=None,tau_vals=None,**kwargs):
     return opVarN(fw_states_T[0].full())
 
@@ -158,6 +200,16 @@ def cat_res(folder,T,canoLabel):
         varN_i = opVarN(state,4)
         return best_cat,best_JT_ss_b,best_JT_ss_m,varX_i,varN_i
     else:return None,1,None,None,None
+
+def cat_res_2(state,T,canoLabel):
+    state = localTools.rotate_state(state,4,0,float(T))
+    JT_i = bestCat(state,False)
+    best_JT_ss_m = min(JT_i)
+    best_cat = f'{JT_i.index(best_JT_ss_m)}+'
+    best_JT_ss_b = JT_i[int(canoLabel[0])]
+    varX_i = opVarX(state,4)
+    varN_i = opVarN(state,4)
+    return best_cat,best_JT_ss_b,best_JT_ss_m,varX_i,varN_i
 
 
 def cat_res_P(folder,T):

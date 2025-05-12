@@ -76,7 +76,34 @@ def plot_stored_results(goals):
     plt.savefig(f'data/{fig_name}.pdf')
     plt.clf()
 
+def draw_iters(csv_name,best_label,fig_num):
+    JT_m_per_run = []
+    JT_b_per_run = []
+    X_i = []
+    N_i = []
+    with open(csv_name, mode ='r') as file:    
+        csvFile = csv.DictReader(file)
+        for line in csvFile:
+            JT_b_per_run.append(float(line['current_JT_ss (best cat)']))
+            JT_m_per_run.append(float(line['current_JT_ss (min cat)']))
+            X_i.append(float(line['var_X']))
+            N_i.append(float(line['var_N']))
+    fig,ax = plt.subplots(2,1,figsize=(12,9))
+    ax[0].plot(JT_m_per_run,label='min')
+    ax[0].plot(JT_b_per_run,label=rf'$|{best_label}\rangle$')
+    ax[1].plot(X_i,label = 'Var(X)')
+    ax[1].plot(N_i,label = 'Var(N)')
+    ax[0].legend(loc='best')
+    ax[1].legend(loc='best')
+    ax[0].grid()
+    ax[1].grid()
+    ax[0].set_ylabel('inFidelity')
+    fig.supxlabel('iters')
+    plt.legend(loc='best')
+    plt.savefig(f'data/Fig_{fig_num}.pdf')
 
 plot_stored_results('cano_s')
 plot_stored_results('cano_f')
+draw_iters('data/iter_info_fig3.csv','0-',3)
+draw_iters('data/iter_info_fig3.csv','1+',4)
 cano_fit(np.linspace(20,50,10**5))
