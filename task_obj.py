@@ -84,8 +84,8 @@ class Propagation:
         if len(self.tlist) == 3:
             ipt_tlist = self.tlist
         for k,v in self.pulse_options.items():
-            converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
-                                    t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
+            converted_options[k] = dict(lambda_a=float(v['lambda_a']),update_shape=partial(localTools.S,
+                                    t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall']),args=v['args'])
             self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
         self.Krotov_pulse_ops =  converted_options
 
@@ -93,17 +93,22 @@ class Propagation:
         lambda_as = []
         if approach:
             for k in self.pulse_options.keys():
-                self.pulse_options[k]['oct_lambda_a'] *= change_factor
+                self.pulse_options[k]['lambda_a'] *= change_factor
                 self.Krotov_pulse_ops[k]['lambda_a'] *= change_factor
-                lambda_as.append(self.pulse_options[k]['oct_lambda_a'])
+                lambda_as.append(self.pulse_options[k]['lambda_a'])
             print(f'new lambda_a: {lambda_as}')
         else:
             for k in self.pulse_options.keys():
-                self.pulse_options[k]['oct_lambda_a'] = change_factor
+                self.pulse_options[k]['lambda_a'] = change_factor
                 self.Krotov_pulse_ops[k]['lambda_a'] = change_factor
-                lambda_as.append(self.pulse_options[k]['oct_lambda_a'])
+                lambda_as.append(self.pulse_options[k]['lambda_a'])
             print(f'new lambda_a: {lambda_as}')
 
+    def obtain_lambda_a(self):
+        lambda_as = []
+        for k in self.pulse_options.keys():
+            lambda_as.append(self.pulse_options[k]['lambda_a'])
+        return lambda_as
 
     def propagate_sg(self,dt,t,psi_0,backwards=False):
         psi_0 = copy.deepcopy(psi_0)
@@ -186,6 +191,13 @@ class Propagation:
             self.pulse_options[self.Hamiltonian[i+1][1]]['args']["fit_func"] = new_fit
         self.krotov_pulse_options()
 
+    def obtain_pulse(self):
+        pulses = []
+        for Hi in self.Hamiltonian:
+            if isinstance(Hi,list):
+                pulses.append(Hi[1](self.tlist_long,self.pulse_options[Hi[1]]['args']))
+        return pulses
+
     def plot_pulses(self):
         for i in range(len(self.Hamiltonian)):
             if isinstance(self.Hamiltonian[i],list):
@@ -202,7 +214,7 @@ class Propagation:
         pulse_count = 0
         for i in range(len(self.Hamiltonian)):
             if isinstance(self.Hamiltonian[i],list):
-                id_pulse_option = self.pulse_options[self.Hamiltonian[i][1]]
+                id_pulse_option = self.Krotov_pulse_ops[self.Hamiltonian[i][1]]
                 mat_text = read_write.matrix2text(self.Hamiltonian[i][0])
                 pulse_text = read_write.control2text(self.tlist_long,self.Hamiltonian[i][1](self.tlist_long,id_pulse_option['args']))
                 with open(path + f'{self.pulse_name}_{pulse_count}.dat','w') as pulse_file:
@@ -210,7 +222,7 @@ class Propagation:
                 Hamiltonian_info.append({'dim':self.Hamiltonian[i][0].shape[0],'filename':f'H{i}.dat','pulse_id':pulse_count})
                 id_pulse_info = {'pulse_id':pulse_count,'filename':f'{self.pulse_name}_{pulse_count}.dat'}
                 for key in id_pulse_option.keys():
-                    if key != 'args':
+                    if key != 'args' and key != 'update_shape':
                         id_pulse_info[key] = id_pulse_option[key]
                 pulse_info.append(id_pulse_info)
                 pulse_count += 1
@@ -301,9 +313,9 @@ class Optimization:
             observables_dict = []
             for i in range(len(self.observables)):
                 observable_text = read_write.matrix2text(self.observables[i])
-                with open(path+f'O{i}.dat', 'w') as observable_file:
+                with open(path+f'O{i+1}.dat', 'w') as observable_file:
                     observable_file.write(observable_text)
-                observables_dict.append({'filename':f'O{i}.dat'})
+                observables_dict.append({'filename':f'O{i+1}.dat'})
             config_dict['observables'] = observables_dict
         config_dict['oct'] = self.oct_info
         config_text = dict2string(config_dict)
@@ -388,6 +400,26 @@ class Optimization:
                     print(f'stop condition met (JT_iter[-1] < {self.oct_info['JT_conv']}: {JT_iter[-1] < self.oct_info['JT_conv']}, ΔJT < {self.oct_info['delta_JT_conv']}): {(JT_iter[-2] - JT_iter[-1]) < self.oct_info['delta_JT_conv']}, break')
                     break
         return JT_iter,psi_T
+
+    def store_result(self,runfolder,psi_T):
+        pulses = self.prop.obtain_pulse()
+        for i in range(len(pulses)):
+            control_text = read_write.control2text(self.prop.tlist_long,pulses[i])
+            with open(runfolder+f'pulse_oct_{i}.dat','w') as pulse_f:
+                pulse_f.write(control_text)
+        if self.prop.n_states == 1:
+            state = psi_T[0]
+            if isinstance(state,qutip.Qobj):state=state.full()
+            state_text = read_write.state2text(state)
+            with open(runfolder+'psi_final_after_oct.dat','w') as state_f:
+                state_f.write(state_text)
+        else:
+            for i in range(self.prop.n_states):
+                state = psi_T[i]
+                if isinstance(state,qutip.Qobj):state=state.full()
+                state_text = read_write.state2text(state)
+                with open(runfolder+f'psi_{i}_final_after_oct.dat','w') as state_f:
+                    state_f.write(state_text)
 
     def GRAPE_update_pulse(self,psi_t,lambda_t,Hamiltonian,epsilon,tlist,n_states,pulse_options):
         lambda_t.reverse()

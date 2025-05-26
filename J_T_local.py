@@ -112,23 +112,16 @@ def chis_var(psi_Ts,operators,op_sqs):
             #print(f'chis exp part {op_exp}')
             chis_Ket += (1/len(operators)) * np.matmul(2*op_exp*op - op_sq,psi_T)
         chis_Kets.append(qutip.Qobj(chis_Ket))
-    #print(f'chis_var: number of operators: {len(operators)}, number of states: {len(psi_Ts)}')
     return chis_Kets
-import datetime
+
 def JT_var(psi_Ts,operators,op_sqs):
     JT_val = 0.
     for psi_T in psi_Ts:
-        #print(localTools.rotate_state(psi_T,4,0,20.0))
         if isinstance(psi_T,qutip.Qobj):psi_T = psi_T.full()
         state_dm = localTools.densityMatrix(psi_T)
         for op,op_sq in zip(operators,op_sqs):
-            #print(f'JT_var p2: {-np.trace(np.matmul(state_dm,op))**2}, JT_var p2 without square {-np.trace(np.matmul(state_dm,op))}')
             JT_val += np.real(np.trace(np.matmul(state_dm,op_sq))-np.trace(np.matmul(state_dm,op))**2)
-    #print(f'JT_var: number of operators: {len(operators)}, number of states: {len(psi_Ts)}')
     return JT_val / len(operators) / len(psi_Ts)
-
-def J_T_opVarN(fw_states_T,objectives=None,tau_vals=None,**kwargs):
-    return opVarN(fw_states_T[0].full())
 
 def opVar(mat,state,f_name=None,rwa=False):
     #print(state)
@@ -142,42 +135,19 @@ def opVar(mat,state,f_name=None,rwa=False):
     #print(f'opVar p2: {-np.trace(np.matmul(state_dm,mat))**2}, opVarp2 without square {np.trace(np.matmul(state_dm,mat))}')
     return np.real(np.trace(np.matmul(state_dm,mat_sqr))-np.trace(np.matmul(state_dm,mat))**2)
 
-'''
-X = mat_X(4,2)
-X_r = localTools.rotate_matrix(X,4,1,20)
-X_1 = localTools.rotate_matrix(X,4,1,20)
-X_0 = localTools.rotate_matrix(X,4,0,20)
-state = [qutip.rand_ket(16)]
-state = state[0].full()
-state_nr = copy.deepcopy(state)
-state_1 = localTools.rotate_state(state,4,1,20)
-state_0 = localTools.rotate_state(state,4,0,20)
-state = [localTools.rotate_state(state,4,1,20)]
-#state = [qutip.Qobj(state)]
-
-#print(JT_var(state,[X_r],[np.matmul(X_r,X_r)]))
-#print(JT_var(state,[X],[np.matmul(X,X)]))
-print(opVar(X_1,state_1,'states/dm_1.dat',True))
-#print(opVar(X_0,state_0))
-print(opVar(X,state_nr,'states/dm_0.dat'))
-'''
-
-
 def opVarX(state,num_qubit,X_factor = 1):
     return opVar(mat_X(num_qubit,X_factor),state)
 def opVarN(state,num_qubit,N_factor = 1,shuffle_key=False):
     return opVar(mat_N(num_qubit,N_factor,shuffle_key),state)
 
-#def chis_X(fw_states_T, objectives=None, tau_vals=None):
-def chis_X(state, X_factor):
-    #state=fw_states_T[0].full()
+def chis_X(fw_states_T, objectives=None, tau_vals=None):
+    state=fw_states_T[0].full()
     num_qubit=int(math.log(len(state),2))
     rho=localTools.densityMatrix(state)
-    #X_factor = 1
+    X_factor = 1
     X_Operator=mat_X(num_qubit,X_factor)
     X2 = np.eye(2**num_qubit)
     X_exp=np.trace(np.matmul(X_Operator,rho))
-    #print(f'chis exp: {X_exp}')
     chisKet=np.matmul(2*X_exp*X_Operator-X2,state)
     chisKet = localTools.rotate_state(chisKet,4,1,20.0)
     return [qutip.Qobj(chisKet)]

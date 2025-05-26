@@ -153,7 +153,7 @@ def config_opt(path,zero_base = True):
         observables = []
         for i in range(len(config['observables']['subsections'])):
             observable = read_write.matrixReader(path+config['observables']['subsections'][i]['filename'],int(config['ham']['main']['dim']),zero_base)
-        observables.append(qutip.Qobj(observable))
+        observables.append(observable)
         opt_obj.set_observables(observables)
     return opt_obj,config
 
