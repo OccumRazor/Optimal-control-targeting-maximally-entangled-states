@@ -114,7 +114,7 @@ def control_generator_read(num_qubit, control_source, header, endTime):
 
 
 def control_generator_random(num_qubit, guess_amp, endTime):
-    num_points = 25
+    num_points = 10
     control_args = []
     for i in range(num_qubit):
         detupleGuess = (
@@ -239,14 +239,30 @@ def write_pulse(tlist,pulse,file_title):
         for t,amp in zip(tlist,pulse):
             log_f.write(f'{t:.16e}    {amp:.16e}\n')
 
+'''
 def densityMatrix(state):
     #print(state)
     if not isinstanceVector(state):
+        print('ipt is not a vector, do nothing')
         return state
     if isinstance(state[0], list) or isinstance(state[0], np.ndarray):
         state = list(np.array(state).T[0])
     return np.outer(np.conjugate(state),state)
+'''
 
+def densityMatrix(state):
+    if not isinstanceVector(state):
+        return state
+    if isinstance(state[0], list) or isinstance(state[0], np.ndarray):
+        state = list(np.array(state).T[0])
+    #dm = []
+    dm = np.zeros([len(state),len(state)],dtype=np.complex128)
+    for i in range(len(state)):
+        #dm.append([])
+        for j in range(len(state)):
+            #dm[i].append(complex(state[i] * np.conjugate(state[j])))
+            dm[i][j] = complex(state[i] * np.conjugate(state[j]))
+    return np.array(dm)
 
 def isinstanceVector(state):
     # this function check whether the state is a ket/bra or not.
@@ -305,7 +321,7 @@ def canoGHZGen(num_qubit, canoLabel, phi = 0):
     return qutip.Qobj(state)
 
 def rotate_state(state, num_qubit, direction=0, endTime=0):
-    H0 = np.zeros([2**num_qubit, 2**num_qubit], dtype=np.complex64)
+    H0 = np.zeros([2**num_qubit, 2**num_qubit], dtype=np.complex128)
     for i in range(num_qubit):
         H0 += (
             0.5
@@ -324,7 +340,7 @@ def rotate_state(state, num_qubit, direction=0, endTime=0):
         )  # \psi_nR=U\psi_RWA, return lab frame state.
 
 def rotate_matrix(mat, num_qubit, direction=0, endTime=0):
-    H0 = np.zeros([2**num_qubit, 2**num_qubit], dtype=np.complex64)
+    H0 = np.zeros([2**num_qubit, 2**num_qubit], dtype=np.complex128)
     for i in range(num_qubit):
         H0 += (
             0.5

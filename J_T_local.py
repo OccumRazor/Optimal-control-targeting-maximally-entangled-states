@@ -25,16 +25,51 @@ def chis_taus(state,ref):
 def J_T_re(state,ref):
     return 1-np.real(tau(state,ref))
 
-def J_T_ss(state,ref):
-    tau_val = tau(state,ref)
-    return 1-np.real(tau_val*np.conjugate(tau_val))
+def chis_ss(states,refs):
+    if isinstance(states,list):
+        for i in range(len(states)):
+            if isinstance(states[i],qutip.Qobj):states[i] = states[i].full()
+            if isinstance(refs[i],qutip.Qobj):refs[i] = refs[i].full()
+        chis = []
+        for i in range(len(states)):
+            chis.append(tau(states[i],refs[i]) * refs[i])
+        return chis
+    else:
+        return tau(states,refs) * refs
 
-def chis_ss(state,ref):
-    return tau(state,ref) * ref
+def JT_ss(states,refs):
+    if isinstance(states,list):
+        val = 0
+        for i in range(len(states)):
+            tau_val = tau(states[i],refs[i])
+            val += 1-np.real(tau_val*np.conjugate(tau_val))
+        return val / len(states)
+    else:
+        tau_val = tau(states,refs)
+        return 1-np.real(tau_val*np.conjugate(tau_val))
+
 
 def J_T_abs(state,ref):
     return 1-np.abs(tau(state,ref))
 
+def mat_X(num_qubit,X_factor):
+    X = np.zeros([2**num_qubit, 2**num_qubit],dtype=np.complex128)
+    for i in range(2**num_qubit):
+        X[i][2**num_qubit - i - 1] = X_factor
+    return X
+
+def mat_N(num_qubit,N_factor,shuffle_key=False):
+    N = np.zeros([2**num_qubit, 2**num_qubit])
+    N_val = 2 ** (num_qubit - 2 + N_factor)
+    valsDeposit0 = list(
+        np.linspace(1, N_val, 2 ** (num_qubit - 1)))
+    if shuffle_key:random.shuffle(valsDeposit0)
+    valsDeposit1 = copy.deepcopy(valsDeposit0)
+    valsDeposit1.reverse()
+    valsDeposit = valsDeposit0 + valsDeposit1
+    for i in range(2**num_qubit):
+        N[i][i] += valsDeposit[i]
+    return N
 
 def localFidelity(state,ref='None'):
     if isinstance(state,qutip.Qobj):state=state.full()
@@ -56,88 +91,102 @@ def inFidelity(state,ref=False):
     return 1-localFidelity(state,ref)
 
 def functional_master(functional_name):
-    if functional_name == 'inFidelity' or 'JT_ss':
+    if functional_name in ['inFidelity','JT_ss']:
         return [chis_inFidelity,J_T_inFidelity,inFidelity]
     if functional_name == 'XN':
         return [chis_XN,J_T_XN,J_T_XN]
+    if functional_name == 'X':
+        return [chis_X,J_T_X,J_T_X]
     #surnames = ["chis_", "J_T_", ""]
     #functional_names = [surname + functional_name for surname in surnames]
     #return [eval(functional) for functional in functional_names]
 
-def chis_XN(fw_states_T, objectives=None, tau_vals=None):
-    state=fw_states_T[0].full()
-    num_qubit=int(math.log(len(state),2))
-    rho=localTools.densityMatrix(state)
-    X_factor = 1
-    N_factor = 1.5
-    N_Operator=mat_N(num_qubit,N_factor)
-    N2=np.matmul(N_Operator,N_Operator)
-    N_exp=np.trace(np.matmul(N_Operator,rho))
-    X_Operator=mat_N(num_qubit,X_factor)
-    X2 = np.eye(2**num_qubit)
-    X_exp=np.trace(np.matmul(X_Operator,rho))
-    chisKet=0.5*np.matmul(2*N_exp*N_Operator-N2,state)
-    chisKet+=0.5*np.matmul(2*X_exp*X_Operator-X2,state)
-    return [qutip.Qobj(chisKet)]
-
-def chis_var(psi_Ts,operators):
-    op_sqs = []
-    for op in operators:
-        op_sqs.append(np.matmul(op,op))
-    states=[psi_Ts[i].full() for i in range(len(psi_Ts))]
+def chis_var(psi_Ts,operators,op_sqs):
     chis_Kets = []
-    for state in states:
-        chis_Ket = np.zeros([len(state),1],dtype=np.complex128)
-        state_dm = localTools.densityMatrix(state)
+    for psi_T in psi_Ts:
+        chis_Ket = np.zeros([len(operators[0]),1],dtype=np.complex128)
+        if isinstance(psi_T,qutip.Qobj):psi_T = psi_T.full()
+        state_dm = localTools.densityMatrix(psi_T)
         for op,op_sq in zip(operators,op_sqs):
             op_exp = np.trace(np.matmul(state_dm,op))
-            chis_Ket += 0.5 * np.matmul(2*op_exp*op-op_sq,state)
+            #print(f'chis exp part {op_exp}')
+            chis_Ket += (1/len(operators)) * np.matmul(2*op_exp*op - op_sq,psi_T)
         chis_Kets.append(qutip.Qobj(chis_Ket))
+    #print(f'chis_var: number of operators: {len(operators)}, number of states: {len(psi_Ts)}')
     return chis_Kets
-
-def JT_var(psi_Ts,operators):
-    op_sqs = []
-    for op in operators:
-        op_sqs.append(np.matmul(op,op))
-    JT_val = 0
+import datetime
+def JT_var(psi_Ts,operators,op_sqs):
+    JT_val = 0.
     for psi_T in psi_Ts:
-        state_dm = localTools.densityMatrix(psi_T.full())
+        #print(localTools.rotate_state(psi_T,4,0,20.0))
+        if isinstance(psi_T,qutip.Qobj):psi_T = psi_T.full()
+        state_dm = localTools.densityMatrix(psi_T)
         for op,op_sq in zip(operators,op_sqs):
+            #print(f'JT_var p2: {-np.trace(np.matmul(state_dm,op))**2}, JT_var p2 without square {-np.trace(np.matmul(state_dm,op))}')
             JT_val += np.real(np.trace(np.matmul(state_dm,op_sq))-np.trace(np.matmul(state_dm,op))**2)
+    #print(f'JT_var: number of operators: {len(operators)}, number of states: {len(psi_Ts)}')
     return JT_val / len(operators) / len(psi_Ts)
 
 def J_T_opVarN(fw_states_T,objectives=None,tau_vals=None,**kwargs):
     return opVarN(fw_states_T[0].full())
 
-def opVar(mat,state):
+def opVar(mat,state,f_name=None,rwa=False):
+    #print(state)
     mat_sqr = np.matmul(mat,mat)
     state_dm = localTools.densityMatrix(state)
+    if f_name:
+        if rwa:state_text = read_write.matrix2text(localTools.rotate_matrix(state_dm,4,0,20))
+        else:state_text = read_write.matrix2text(state_dm)
+        with open(f_name,'w') as state_f:
+            state_f.write(state_text)
+    #print(f'opVar p2: {-np.trace(np.matmul(state_dm,mat))**2}, opVarp2 without square {np.trace(np.matmul(state_dm,mat))}')
     return np.real(np.trace(np.matmul(state_dm,mat_sqr))-np.trace(np.matmul(state_dm,mat))**2)
 
-def mat_X(num_qubit,X_factor):
-    X = np.zeros([2**num_qubit, 2**num_qubit])
-    for i in range(2**num_qubit):
-        X[i][2**num_qubit - i - 1] = X_factor
-    return X
+'''
+X = mat_X(4,2)
+X_r = localTools.rotate_matrix(X,4,1,20)
+X_1 = localTools.rotate_matrix(X,4,1,20)
+X_0 = localTools.rotate_matrix(X,4,0,20)
+state = [qutip.rand_ket(16)]
+state = state[0].full()
+state_nr = copy.deepcopy(state)
+state_1 = localTools.rotate_state(state,4,1,20)
+state_0 = localTools.rotate_state(state,4,0,20)
+state = [localTools.rotate_state(state,4,1,20)]
+#state = [qutip.Qobj(state)]
 
-def mat_N(num_qubit,N_factor,shuffle_key=False):
-    N = np.zeros([2**num_qubit, 2**num_qubit])
-    N_val = np.sqrt(2 ** (num_qubit - 2 + N_factor))
-    valsDeposit0 = list(
-        np.linspace(1, N_val, 2 ** (num_qubit - 1)))
-    if shuffle_key:random.shuffle(valsDeposit0)
-    valsDeposit1 = copy.deepcopy(valsDeposit0)
-    valsDeposit1.reverse()
-    valsDeposit = valsDeposit0 + valsDeposit1
-    for i in range(2**num_qubit):
-        N[i][i] += valsDeposit[i]
-    return N
+#print(JT_var(state,[X_r],[np.matmul(X_r,X_r)]))
+#print(JT_var(state,[X],[np.matmul(X,X)]))
+print(opVar(X_1,state_1,'states/dm_1.dat',True))
+#print(opVar(X_0,state_0))
+print(opVar(X,state_nr,'states/dm_0.dat'))
+'''
 
 
 def opVarX(state,num_qubit,X_factor = 1):
     return opVar(mat_X(num_qubit,X_factor),state)
 def opVarN(state,num_qubit,N_factor = 1,shuffle_key=False):
     return opVar(mat_N(num_qubit,N_factor,shuffle_key),state)
+
+#def chis_X(fw_states_T, objectives=None, tau_vals=None):
+def chis_X(state, X_factor):
+    #state=fw_states_T[0].full()
+    num_qubit=int(math.log(len(state),2))
+    rho=localTools.densityMatrix(state)
+    #X_factor = 1
+    X_Operator=mat_X(num_qubit,X_factor)
+    X2 = np.eye(2**num_qubit)
+    X_exp=np.trace(np.matmul(X_Operator,rho))
+    #print(f'chis exp: {X_exp}')
+    chisKet=np.matmul(2*X_exp*X_Operator-X2,state)
+    chisKet = localTools.rotate_state(chisKet,4,1,20.0)
+    return [qutip.Qobj(chisKet)]
+
+def J_T_X(fw_states_T,objectives,tau_vals=None,**kwargs):
+    state=fw_states_T[0].full()
+    num_qubit = int(np.log2(len(state)))
+    X_factor = 1
+    return opVar(mat_X(num_qubit,X_factor),state)
 
 def chis_XN(fw_states_T, objectives=None, tau_vals=None):
     state=fw_states_T[0].full()
@@ -169,7 +218,7 @@ def bestCat(state,min_key=True):
         allCats.append(np.complex128(np.zeros([2**num_qubit,1])))
         allCats[i][i]=np.exp(1j*np.angle(state[i][0]))/np.sqrt(2)
         allCats[i][2**(num_qubit)-i-1]=np.exp(1j*np.angle(state[2**(num_qubit)-i-1][0]))/np.sqrt(2)
-    fidelityList=[J_T_ss(state,thisCat) for thisCat in allCats]
+    fidelityList=[JT_ss(state,thisCat) for thisCat in allCats]
     if min_key:return f'{fidelityList.index(min(fidelityList))}+', min(fidelityList)
     else:return fidelityList
 
@@ -182,7 +231,7 @@ def bestCat_phase(state,min_key=True,val_opt = False):
         allCats[i][i]=np.exp(1j*np.angle(state[i][0]))/np.sqrt(2)
         allCats[i][2**(num_qubit)-i-1]=np.exp(1j*np.angle(state[2**(num_qubit)-i-1][0]))/np.sqrt(2)
         r_angle.append(np.angle(state[i][0])-np.angle(state[2**(num_qubit)-i-1][0]))
-    fidelityList=[J_T_ss(state,thisCat) for thisCat in allCats]
+    fidelityList=[JT_ss(state,thisCat) for thisCat in allCats]
     min_loc = fidelityList.index(min(fidelityList))
     if val_opt:return min(fidelityList),r_angle[min_loc]/np.pi
     if min_key:return f'{min_loc}+', min(fidelityList),f'{r_angle[min_loc]/np.pi}pi'

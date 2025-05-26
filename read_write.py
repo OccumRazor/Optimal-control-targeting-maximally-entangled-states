@@ -34,7 +34,7 @@ def matrix_title(matrix_shape,is_complex):
 
 def state2text(state):
     if not isinstance(state,coo_array):state=coo_array(state)
-    is_complex = all(np.iscomplex(state.data))
+    is_complex = any(np.iscomplex(state.data))
     text_content = state_title(state.shape,is_complex)
     state._len_max_row = len(str(state.shape[0]))
     for i in range(state.nnz):
@@ -49,7 +49,7 @@ def state2text(state):
 def matrix2text(matrix):
     if not isinstance(matrix,coo_matrix):matrix = coo_matrix(matrix)  
     len_max_row = len(str(matrix.shape[0]))  
-    is_complex = all(np.iscomplex(matrix.data))
+    is_complex = any(np.iscomplex(matrix.data))
     text_content = matrix_title(matrix.shape,is_complex)
     for i in range(len(matrix.row)):
         row_text = space_symbol * (3 + len_max_row - len(str(matrix.row[i]))) + str(matrix.row[i])

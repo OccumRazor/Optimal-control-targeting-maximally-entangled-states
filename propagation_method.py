@@ -1,4 +1,4 @@
-import numpy as np
+import numpy as np,scipy
 from scipy.special import jv,j0,j1
 
 '''.vscode\
@@ -27,6 +27,12 @@ def Bessel_function(num,k,lower_bound=1e-17):
         coe_amp = BF(k,l,num)
         coefficient += coe_amp
     return coefficient
+
+def expm(herm_mat,initial_state,dt,backwards = False):
+    if isinstance(herm_mat,list):herm_mat=np.array(herm_mat)
+    if backwards: Ut = scipy.linalg.expm(1j * herm_mat * dt)
+    else: Ut = scipy.linalg.expm(-1j * herm_mat * dt)
+    return Ut.dot(initial_state)
 
 def Chebyshev(herm_mat,initial_state,E_max,E_min,dt,backwards = False):
     if isinstance(herm_mat,list):herm_mat=np.array(herm_mat)

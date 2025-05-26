@@ -1,4 +1,4 @@
-import read_write,numpy as np,localTools,re,qutip,Krotov_API,krotov,J_T_local,propagation_method,copy,matplotlib.pyplot as plt
+import read_write,numpy as np,localTools,time,qutip,Krotov_API,krotov,J_T_local,propagation_method,copy,matplotlib.pyplot as plt
 from functools import partial
 from pathlib import Path
 from scipy.interpolate import interp1d
@@ -80,16 +80,30 @@ class Propagation:
     def krotov_pulse_options(self):
         converted_options = {}
         if len(self.tlist) == 2:
-            for k,v in self.pulse_options.items():
-                converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
-                                        t_start=0, t_stop=self.tlist[0], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
-                self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
+            ipt_tlist = [0,self.tlist[0],self.tlist[1]]
         if len(self.tlist) == 3:
-            for k,v in self.pulse_options.items():
-                converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
-                                        t_start=self.tlist[0], t_stop=self.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
-                self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
+            ipt_tlist = self.tlist
+        for k,v in self.pulse_options.items():
+            converted_options[k] = dict(lambda_a=float(v['oct_lambda_a']),update_shape=partial(localTools.S,
+                                    t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),args=v['args'])
+            self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
         self.Krotov_pulse_ops =  converted_options
+
+    def change_lambda_a(self,change_factor,approach = 1):
+        lambda_as = []
+        if approach:
+            for k in self.pulse_options.keys():
+                self.pulse_options[k]['oct_lambda_a'] *= change_factor
+                self.Krotov_pulse_ops[k]['lambda_a'] *= change_factor
+                lambda_as.append(self.pulse_options[k]['oct_lambda_a'])
+            print(f'new lambda_a: {lambda_as}')
+        else:
+            for k in self.pulse_options.keys():
+                self.pulse_options[k]['oct_lambda_a'] = change_factor
+                self.Krotov_pulse_ops[k]['lambda_a'] = change_factor
+                lambda_as.append(self.pulse_options[k]['oct_lambda_a'])
+            print(f'new lambda_a: {lambda_as}')
+
 
     def propagate_sg(self,dt,t,psi_0,backwards=False):
         psi_0 = copy.deepcopy(psi_0)
@@ -101,7 +115,8 @@ class Propagation:
         E_min = min(eig_vals)
         for i in range(self.n_states):
             if isinstance(psi_0[i],qutip.Qobj):psi_0[i]=psi_0[i].full()
-            psi_0[i] = qutip.Qobj(propagation_method.Chebyshev(Ht,psi_0[i],E_max,E_min,dt,backwards=backwards))
+            if self.prop_method == 'cheby':psi_0[i] = qutip.Qobj(propagation_method.Chebyshev(Ht,psi_0[i],E_max,E_min,dt,backwards=backwards))
+            if self.prop_method == 'expm':psi_0[i] = qutip.Qobj(propagation_method.expm(Ht,psi_0[i],dt,backwards=backwards))
         return psi_0
 
     def propagate_sg_update(self,dt,t,psi_0,chis):
@@ -136,7 +151,8 @@ class Propagation:
         E_max = max(eig_vals)
         E_min = min(eig_vals)
         for i in range(self.n_states):
-            psi_0[i] = qutip.Qobj(propagation_method.Chebyshev(Ht,psi_0[i],E_max,E_min,dt))
+            if self.prop_method == 'cheby':psi_0[i] = qutip.Qobj(propagation_method.Chebyshev(Ht,psi_0[i],E_max,E_min,dt))
+            if self.prop_method == 'expm':psi_0[i] = qutip.Qobj(propagation_method.expm(Ht,psi_0[i],dt))
         return psi_0,update_return,ga_return
 
     def propagate(self,backwards=False,store_states = False,update=False,chis_t=None,prop_options: dict = {}):
@@ -158,7 +174,7 @@ class Propagation:
                     ga_int[k] += np.abs(ga_return[k])
             else:psi_0 = self.propagate_sg(dt,t,psi_0,backwards=backwards)
             if store_states:psi_t.append(psi_0)
-        if update:return psi_0,new_controls,ga_int
+        if update:return psi_0,new_controls,sum(ga_int)/len(ga_int)
         else:
             if store_states:return psi_t
             else:return psi_0
@@ -243,6 +259,7 @@ class Optimization:
     
     def set_observables(self,observables):
         self.observables = observables
+        self.observables_squared = [np.matmul(observable,observable) for observable in self.observables]
 
     def store_initial_controls(self):
         initial_controls = []
@@ -306,10 +323,10 @@ class Optimization:
         path_Path = Path(runfolder)
         path_Path.mkdir(exist_ok=True,parents=True)
         if self.oct_info['oct_method'] != 'krotov':
-            raise KeyError(f"Currently, only krotov and crab is supported for the optimization. Input prop_method: {self.oct_info['oct_method']}")
+            raise KeyError(f"Only krotov and crab is supported for the optimization. Input prop_method: {self.oct_info['oct_method']}")
         if self.prop.prop_method == 'cheby':propagator=Krotov_API.KROTOV_CHEBY
         elif self.prop.prop_method == 'expm':propagator=krotov.propagators.expm
-        else:raise KeyError(f"Currently, only cheby and expm is supported for the propagation. Input prop_method: {self.prop.prop_method}")
+        else:raise KeyError(f"Only cheby and expm is supported for the propagation. Input prop_method: {self.prop.prop_method}")
         opt_functionals=J_T_local.functional_master(functional_name)
         objectives=[krotov.Objective(initial_state=self.prop.initial_states[i],target=self.target_states[i],H=self.prop.Hamiltonian) for i in range(self.prop.n_states)]
         self.prop.krotov_pulse_options()
@@ -334,34 +351,43 @@ class Optimization:
         return opt_result
 
 
-    def Krotov_optimization(self,chi_constructor,JT,XN=None):
+    def Krotov_optimization(self,target_functional,monotonic = False):
         self.store_initial_controls()
         JT_iter = []
+        tic = time.time()
         psi_T = self.prop.propagate()
-        #print(psi_T)
-        if XN:JT_iter.append(J_T_local.JT_var(psi_T,self.observables))
-        else:JT_iter.append(JT(psi_T,self.target_states))
-        print(f'iter    JT,{' ' * 16}    ga_int')
-        print(f'0      {JT_iter[-1]}, 0')
-        pulse_options = {}
-        for k,v in self.prop.pulse_options.items():
-            pulse_options[k] = {'oct_lambda_a':v['oct_lambda_a'],'shape_function':partial(krotov.shapes.flattop,t_start=self.prop.tlist[0], t_stop=self.prop.tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall']), func='blackman')}
+        psi_T_last_step = copy.deepcopy(psi_T)
+        tac = time.time()
+        if target_functional == 0:JT_iter.append(J_T_local.JT_ss(psi_T,self.target_states))
+        if target_functional == 1:JT_iter.append(J_T_local.JT_var(psi_T,copy.deepcopy(self.observables),copy.deepcopy(self.observables_squared)))
+        iter_str_len = len(str(self.oct_info['iter_stop'])) + 2
+        print(f'{' ' * (iter_str_len - 4)}iter{' ' * 4}JT{' ' * 12}ΔJT{' ' * 11}ga_int{' ' * 8}Δt')
+        print(f'{' ' * (iter_str_len-1)}0{' ' * 4}{JT_iter[-1]:.8f}{' ' * 4}{'n/a':>10}{' ' * 4}{'n/a':>10}{' ' * 4}{tac - tic:.2f}')
         for iters in range(1,self.oct_info['iter_stop'] + 1):
-            if XN:chis_T=J_T_local.chis_var(psi_T,self.observables)
-            else:chis_T = chi_constructor(psi_T,self.target_states)
+            if target_functional == 0:chis_T = J_T_local.chis_ss(psi_T,self.target_states)
+            if target_functional == 1:chis_T = J_T_local.chis_var(psi_T,copy.deepcopy(self.observables),copy.deepcopy(self.observables_squared))
+            tic = time.time()
             chis_t = self.prop.propagate(True,True,False,prop_options={'initial_states':chis_T})
             chis_t.reverse()
             psi_T,new_controls,ga_int = self.prop.propagate(False,False,True,chis_t)
-            if XN:
-                JT_iter.append(J_T_local.JT_var(psi_T,self.observables))
-                print(J_T_local.cat_res_2(psi_T[0].full(),self.prop.tlist[1],'0-'))
-            else:JT_iter.append(JT(psi_T,self.target_states))
-            print(f'{iters}      {JT_iter[-1]}    {ga_int}')
-            self.update_control(new_controls)
-            if JT_iter[-1] < 1e-3 or (JT_iter[-2] - JT_iter[-1])/JT_iter[-1] < 1e-3:
-                #print(f'stop condition met (JT_iter[-1] < 1e-3: {JT_iter[-1] < 1e-3}, (JT_iter[-2] - JT_iter[-1])/JT_iter[-1] < 1e-3): {(JT_iter[-2] - JT_iter[-1])/JT_iter[-1] < 1e-3}, break')
-                break
-        return JT_iter
+            tac = time.time()
+            if target_functional == 0:JT_new = J_T_local.JT_ss(psi_T,self.target_states)
+            if target_functional == 1:
+                JT_new = J_T_local.JT_var(psi_T,copy.deepcopy(self.observables),copy.deepcopy(self.observables_squared))
+                #print(J_T_local.cat_res_2(psi_T[0].full(),self.prop.tlist[1],'0-'))
+            if JT_new > JT_iter[-1] and monotonic:
+                print(f'{' ' * (iter_str_len - len(str(iters)))}{iters} monotonicity breaks, JT_new = {JT_new}, increase lambda_a by a factor of 2.')
+                psi_T = copy.deepcopy(psi_T_last_step)
+                self.prop.change_lambda_a(2)
+            else:
+                psi_T_last_step = copy.deepcopy(psi_T)
+                JT_iter.append(JT_new)
+                print(f'{' ' * (iter_str_len - len(str(iters)))}{iters}{' ' * 4}{JT_iter[-1]:.8f}{' ' * 4}{JT_iter[-2] - JT_iter[-1]:.8f}{' ' * 4}{ga_int:.8f}{' ' * 4}{tac - tic:.2f}')
+                self.update_control(new_controls)
+                if JT_iter[-1] < self.oct_info['JT_conv'] or np.abs(JT_iter[-2] - JT_iter[-1]) < self.oct_info['delta_JT_conv']:
+                    print(f'stop condition met (JT_iter[-1] < {self.oct_info['JT_conv']}: {JT_iter[-1] < self.oct_info['JT_conv']}, ΔJT < {self.oct_info['delta_JT_conv']}): {(JT_iter[-2] - JT_iter[-1]) < self.oct_info['delta_JT_conv']}, break')
+                    break
+        return JT_iter,psi_T
 
     def GRAPE_update_pulse(self,psi_t,lambda_t,Hamiltonian,epsilon,tlist,n_states,pulse_options):
         lambda_t.reverse()
