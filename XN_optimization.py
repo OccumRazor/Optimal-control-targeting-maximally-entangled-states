@@ -39,7 +39,7 @@ def Krotov_config_task(canoLabel,tlist,lambda_a,JT_conv,dJT_conv,iter_stop,contr
     initial_states = [localTools.canoGHZGen(num_qubit,'0'*num_qubit)]
     pulse_options={}
     if not control_source:
-        control_source = 2
+        control_source = 1
         header = None
     control_args = localTools.control_generator(num_qubit,control_source,tlist[1],header)
     for i in range(1,len(H)):
