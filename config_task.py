@@ -2,7 +2,7 @@ import read_write,numpy as np,localTools,re,qutip,task_obj
 from collections import defaultdict
 from scipy.interpolate import interp1d
 
-str2float_keys = ['oct_lambda_a','lambda_a','t_start','t_stop','t_rise','f_fall']
+str2float_keys = ['oct_lambda_a','lambda_a','t_start','t_stop','t_rise','t_fall']
 
 
 def combine_relevant_lines(sentence_list):

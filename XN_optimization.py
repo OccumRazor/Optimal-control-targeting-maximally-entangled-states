@@ -252,10 +252,10 @@ def XN_opt_continue(T,task_folder,lambda_X,control_source,iter_stop_XN):
     opt_obj.store_result(XN_folder,psi_T)
 
 import os
-for T in [50.03]:
+for T in [30.0,35.0,40.03,45.0,50.03]:
     i = 0
-    while os.path.exists(f'states/{T}_{i}/'): i += 1
-    task_folder = f'states/{T}_{i}/'
-    control_source = f'opt_examples/{T}/'
+    while os.path.exists(f'reproduce_{T}_{i}/'): i += 1
+    task_folder = f'reproduce_{T}_{i}/'
     if T == 40.03:control_source = f'opt_examples/{T}_local_minima/'
+    else:control_source = f'opt_examples/{T}/'
     XN_reproduce(T,task_folder,control_source)

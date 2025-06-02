@@ -24,18 +24,15 @@ def Krotov_config_task(tlist,control_source=None):
     H=localTools.Hamiltonian(num_qubit)
     initial_states = [localTools.canoGHZGen(num_qubit,'0'*num_qubit)]
     pulse_options={}
-    if not control_source:
-        control_source = 2
-        header = None
-    control_args = localTools.control_generator(num_qubit,control_source,tlist[1],header)
+    control_args = localTools.control_generator(num_qubit,control_source,tlist[1],'pulse_oct')
     for i in range(1,len(H)):
         pulse_options[H[i][1]]=dict(args=control_args[i-1])
     prop = task_obj.Propagation(H,tlist,'cheby',initial_states,'pulse_initial',pulse_options)
     return prop
 
-def compare(T):
+def compare(T,control_source):
     #prop,config = config_task.config_prop(path)
-    prop = Krotov_config_task([0,T,801])
+    prop = Krotov_config_task([0,T,801],control_source)
     tlist_NR = prop.tlist_long
     tic = time.time()
     psi_T_0 = prop.propagate()
@@ -71,13 +68,29 @@ def compare(T):
     #plot_controls(tlist_NR,tlist,c_nr_plot,c_rwa_plot)
 
 params = [0,0,0]
-n_tests = 10
+Tlist = [30.0,35.0,40.03,45.0,50.03]
+folders_main = [f'opt_examples/{T}/' for T in Tlist]
+folders_main[2] = 'opt_examples/40.03_local_minima/'
+
+for T,folder in zip(Tlist,folders_main):
+    for subfolder in ['stage_X/','stage_XN/']:
+        J_ss,dt_RWA,dt_NR = compare(T,folder+subfolder)
+        params[0] += J_ss
+        params[1] += dt_RWA
+        params[2] += dt_NR
+
+n_tests = len(Tlist) * 2
+
+# Test with control sequence obtained by optimization with J_XN.
+print(f"Number of tests: {n_tests}\nAverage infidelity: {params[0]/n_tests} \nAverage time without RWA: {params[1]/n_tests} \nAverage time with RWA: {params[2]/n_tests}")
+        
+n_test = 10
+T = 50.0
 for _ in range(n_tests):
-    J_ss,dt_RWA,dt_NR = compare(30.0)
+    J_ss,dt_RWA,dt_NR = compare(T,1)
     params[0] += J_ss
     params[1] += dt_RWA
     params[2] += dt_NR
 
-
-
+# Test with randomly generated control sequence
 print(f"Number of tests: {n_tests}\nAverage infidelity: {params[0]/n_tests} \nAverage time without RWA: {params[1]/n_tests} \nAverage time with RWA: {params[2]/n_tests}")

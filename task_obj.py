@@ -4,6 +4,8 @@ from pathlib import Path
 from scipy.interpolate import interp1d
 from scipy.sparse.linalg import eigsh
 
+str2float_keys = ['oct_lambda_a','lambda_a','t_start','t_stop','t_rise','t_fall']
+
 def sort_property(ipt_list):
     text_content = ''
     n_dicts = len(ipt_list)
@@ -84,9 +86,18 @@ class Propagation:
         if len(self.tlist) == 3:
             ipt_tlist = self.tlist
         for k,v in self.pulse_options.items():
-            #print(k)
-            #print(v)
-            converted_options[k] = dict(args=v['args'])
+            candidate_dict = {}
+            for sub_k,sub_v in v.items():
+                if sub_k in str2float_keys:
+                    candidate_dict[sub_k] = float(sub_v)
+                else:
+                    candidate_dict[sub_k] = sub_v
+            if 'lambda_a' in v.keys():
+                candidate_dict['update_shape']=partial(localTools.S,t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=candidate_dict['t_rise'],t_fall=candidate_dict['t_fall'])
+                self.pulse_options[k]['update_shape']=candidate_dict['update_shape']
+            candidate_dict['t_start']=ipt_tlist[0]
+            candidate_dict['t_stop']=ipt_tlist[1]
+            converted_options[k] = candidate_dict
             #converted_options[k] = dict(lambda_a=float(v['lambda_a']),update_shape=partial(localTools.S,
             #                        t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall']),args=v['args'])
             #self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
