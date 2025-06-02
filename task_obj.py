@@ -84,9 +84,12 @@ class Propagation:
         if len(self.tlist) == 3:
             ipt_tlist = self.tlist
         for k,v in self.pulse_options.items():
-            converted_options[k] = dict(lambda_a=float(v['lambda_a']),update_shape=partial(localTools.S,
-                                    t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall']),args=v['args'])
-            self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
+            #print(k)
+            #print(v)
+            converted_options[k] = dict(args=v['args'])
+            #converted_options[k] = dict(lambda_a=float(v['lambda_a']),update_shape=partial(localTools.S,
+            #                        t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall'])),t_start=ipt_tlist[0], t_stop=ipt_tlist[1], t_rise=float(v['t_rise']), t_fall=float(v['t_fall']),args=v['args'])
+            #self.pulse_options[k]['update_shape']=converted_options[k]['update_shape']
         self.Krotov_pulse_ops =  converted_options
 
     def change_lambda_a(self,change_factor,approach = 1):
@@ -363,7 +366,7 @@ class Optimization:
         return opt_result
 
 
-    def Krotov_optimization(self,target_functional,monotonic = False):
+    def Krotov_optimization(self,target_functional,monotonic = False,out_file = None):
         self.store_initial_controls()
         JT_iter = []
         tic = time.time()
@@ -373,8 +376,17 @@ class Optimization:
         if target_functional == 0:JT_iter.append(J_T_local.JT_ss(psi_T,self.target_states))
         if target_functional == 1:JT_iter.append(J_T_local.JT_var(psi_T,copy.deepcopy(self.observables),copy.deepcopy(self.observables_squared)))
         iter_str_len = len(str(self.oct_info['iter_stop'])) + 2
-        print(f'{' ' * (iter_str_len - 4)}iter{' ' * 4}JT{' ' * 12}ΔJT{' ' * 11}ga_int{' ' * 8}Δt')
-        print(f'{' ' * (iter_str_len-1)}0{' ' * 4}{JT_iter[-1]:.8f}{' ' * 4}{'n/a':>10}{' ' * 4}{'n/a':>10}{' ' * 4}{tac - tic:.2f}')
+        #oct_info = f'{' ' * (iter_str_len - 4)}iter{' ' * 4}JT{' ' * 12}ΔJT{' ' * 11}ga_int{' ' * 8}Δt\n' + f'{' ' * (iter_str_len-1)}0{' ' * 4}{JT_iter[-1]:.8f}{' ' * 4}{'n/a':>10}{' ' * 4}{'n/a':>10}{' ' * 4}{tac - tic:.2f}\n'
+        if out_file:
+            out_stream = open(out_file,'w')
+        message = f'{' ' * (iter_str_len - 4)}iter{' ' * 4}JT{' ' * 12}dJT{' ' * 11}ga_int{' ' * 8}dt'
+        if out_file:out_stream.write(message+'\n')
+        else:print(message)
+        message = f'{' ' * (iter_str_len-1)}0{' ' * 4}{JT_iter[-1]:.8f}{' ' * 4}{'n/a':>10}{' ' * 4}{'n/a':>10}{' ' * 4}{tac - tic:.2f}'
+        if out_file:
+            out_stream.write(message+'\n')
+            out_stream.flush()
+        else:print(message)
         for iters in range(1,self.oct_info['iter_stop'] + 1):
             if target_functional == 0:chis_T = J_T_local.chis_ss(psi_T,self.target_states)
             if target_functional == 1:chis_T = J_T_local.chis_var(psi_T,copy.deepcopy(self.observables),copy.deepcopy(self.observables_squared))
@@ -388,17 +400,28 @@ class Optimization:
                 JT_new = J_T_local.JT_var(psi_T,copy.deepcopy(self.observables),copy.deepcopy(self.observables_squared))
                 #print(J_T_local.cat_res_2(psi_T[0].full(),self.prop.tlist[1],'0-'))
             if JT_new > JT_iter[-1] and monotonic:
-                print(f'{' ' * (iter_str_len - len(str(iters)))}{iters} monotonicity breaks, JT_new = {JT_new}, increase lambda_a by a factor of 2.')
+                message = f'{' ' * (iter_str_len - len(str(iters)))}{iters} monotonicity breaks, JT_new = {JT_new}, increase lambda_a by a factor of 2.'
+                if out_file:
+                    out_stream.write(message+'\n')
+                    out_stream.flush()
+                else:print(message)
                 psi_T = copy.deepcopy(psi_T_last_step)
                 self.prop.change_lambda_a(2)
             else:
                 psi_T_last_step = copy.deepcopy(psi_T)
                 JT_iter.append(JT_new)
-                print(f'{' ' * (iter_str_len - len(str(iters)))}{iters}{' ' * 4}{JT_iter[-1]:.8f}{' ' * 4}{JT_iter[-2] - JT_iter[-1]:.8f}{' ' * 4}{ga_int:.8f}{' ' * 4}{tac - tic:.2f}')
+                message = f'{' ' * (iter_str_len - len(str(iters)))}{iters}{' ' * 4}{JT_iter[-1]:.8f}{' ' * 4}{JT_iter[-2] - JT_iter[-1]:.8f}{' ' * 4}{ga_int:.8f}{' ' * 4}{tac - tic:.2f}'
+                if out_file:
+                    out_stream.write(message+'\n')
+                    out_stream.flush()
+                else:print(message)
                 self.update_control(new_controls)
                 if JT_iter[-1] < self.oct_info['JT_conv'] or np.abs(JT_iter[-2] - JT_iter[-1]) < self.oct_info['delta_JT_conv']:
-                    print(f'stop condition met (JT_iter[-1] < {self.oct_info['JT_conv']}: {JT_iter[-1] < self.oct_info['JT_conv']}, ΔJT < {self.oct_info['delta_JT_conv']}): {(JT_iter[-2] - JT_iter[-1]) < self.oct_info['delta_JT_conv']}, break')
+                    message = f'stop condition met (JT_iter[-1] < {self.oct_info['JT_conv']}: {JT_iter[-1] < self.oct_info['JT_conv']}, ΔJT < {self.oct_info['delta_JT_conv']}: {(JT_iter[-2] - JT_iter[-1]) < self.oct_info['delta_JT_conv']}), break'
+                    if out_file:out_stream.write(message+'\n')
+                    else:print(message)
                     break
+        if out_file:out_stream.close()
         return JT_iter,psi_T
 
     def store_result(self,runfolder,psi_T):
@@ -447,14 +470,14 @@ class Optimization:
                 ga.append(id_ga)
         return new_pulses,id_ga
 
-    def GRAPE(self,target_states,epsilon,iter_stop,JT):
+    def GRAPE(self,target_states,epsilon,iter_stop):
         self.store_initial_controls()
         JT_iter = []
         n_states = len(target_states)
         print(target_states)
         for i in range(iter_stop):
             psi_t = self.prop.propagate(False,True)
-            JT_iter.append(JT(psi_t[-1],target_states))
+            JT_iter.append(J_T_local.JT_tau(psi_t[-1],target_states))
             if i:print(f'iter {i}: {JT_iter[-1]}, ga_int: {ga}')
             else:print(f'iter {i}: {JT_iter[-1]}')
             lambda_t = self.prop.propagate(True,True,prop_options={'initial_states':target_states})
@@ -466,7 +489,7 @@ class Optimization:
                     break
         self.prop.plot_pulses()
         psi_T = self.prop.propagate(False,False)
-        JT_iter.append(JT(psi_T,target_states))
+        JT_iter.append(J_T_local.JT_tau(psi_T,target_states))
         print(f'iter {i}: {JT_iter[-1]}, ga_int: {ga}')
         print(psi_T)
         plt.plot(JT_iter)

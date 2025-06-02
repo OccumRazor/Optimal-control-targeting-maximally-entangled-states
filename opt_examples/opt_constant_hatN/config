@@ -1,0 +1,27 @@
+prop: prop_method = cheby
+
+tgrid: t_start = 0, t_stop = 20.01, nt = 801
+
+ham: dim = 16
+* filename = H0.dat
+* filename = H1.dat, pulse_id = 0
+* filename = H2.dat, pulse_id = 1
+* filename = H3.dat, pulse_id = 2
+* filename = H4.dat, pulse_id = 3
+
+pulse: lambda_a = 100.0, t_fall = 1.0, t_rise = 1.0, t_start = 0, t_stop = 20.01
+* filename = pulse_initial_0.dat, pulse_id = 0
+* filename = pulse_initial_1.dat, pulse_id = 1
+* filename = pulse_initial_2.dat, pulse_id = 2
+* filename = pulse_initial_3.dat, pulse_id = 3
+
+psi: 
+* filename = psi_initial.dat, label = initial
+* filename = psi_final.dat, label = final
+
+observables: 
+* filename = O1.dat
+* filename = O2.dat
+
+oct: oct_method = krotov, JT_conv = 0.01, delta_JT_conv = 1e-07, iter_dat = oct_iter.dat, iter_stop = 1
+

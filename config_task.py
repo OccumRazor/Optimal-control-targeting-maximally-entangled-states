@@ -99,7 +99,8 @@ def config_prop(path,zero_base = True):
     pulses_info = [config['pulse']['subsections'][i] for i in range(len(config['pulse']['subsections']))]
     for i in range(len(pulses_info)):
         for key in config['pulse']['main'].keys():
-            pulses_info[i][key] = config['pulse']['main'][key]
+            if key in str2float_keys:pulses_info[i][key] = float(config['pulse']['main'][key])
+            else:pulses_info[i][key] = config['pulse']['main'][key]
         detupleTlist, detupleGuess = read_write.controlReader(
                 path + pulses_info[i]['filename'])
         cubicSpline_fit = interp1d(

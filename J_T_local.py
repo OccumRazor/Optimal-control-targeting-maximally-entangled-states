@@ -22,6 +22,15 @@ def chis_taus(state,ref):
     #return -tau(state,ref) * ref
     return ref
 
+def JT_tau(states,refs):
+    if isinstance(states,list):
+        val = 0
+        for i in range(len(states)):
+            val += J_T_taus(states[i],refs[i])
+        return val / len(states)
+    else:
+        return J_T_taus(states,refs)
+
 def J_T_re(state,ref):
     return 1-np.real(tau(state,ref))
 
@@ -123,16 +132,13 @@ def JT_var(psi_Ts,operators,op_sqs):
             JT_val += np.real(np.trace(np.matmul(state_dm,op_sq))-np.trace(np.matmul(state_dm,op))**2)
     return JT_val / len(operators) / len(psi_Ts)
 
-def opVar(mat,state,f_name=None,rwa=False):
-    #print(state)
+def opVar(mat,state,f_name=None):
     mat_sqr = np.matmul(mat,mat)
     state_dm = localTools.densityMatrix(state)
     if f_name:
-        if rwa:state_text = read_write.matrix2text(localTools.rotate_matrix(state_dm,4,0,20))
-        else:state_text = read_write.matrix2text(state_dm)
+        state_text = read_write.matrix2text(state_dm)
         with open(f_name,'w') as state_f:
             state_f.write(state_text)
-    #print(f'opVar p2: {-np.trace(np.matmul(state_dm,mat))**2}, opVarp2 without square {np.trace(np.matmul(state_dm,mat))}')
     return np.real(np.trace(np.matmul(state_dm,mat_sqr))-np.trace(np.matmul(state_dm,mat))**2)
 
 def opVarX(state,num_qubit,X_factor = 1):
@@ -224,11 +230,11 @@ def cat_res_2(state,T,canoLabel):
     state = localTools.rotate_state(state,4,0,float(T))
     JT_i = bestCat(state,False)
     best_JT_ss_m = min(JT_i)
-    best_cat = f'{JT_i.index(best_JT_ss_m)}+'
+    min_cat = f'{JT_i.index(best_JT_ss_m)}+'
     best_JT_ss_b = JT_i[int(canoLabel[0])]
     varX_i = opVarX(state,4)
     varN_i = opVarN(state,4)
-    return best_cat,best_JT_ss_b,best_JT_ss_m,varX_i,varN_i
+    return min_cat,best_JT_ss_b,best_JT_ss_m,varX_i,varN_i
 
 
 def cat_res_P(folder,T):

@@ -103,7 +103,7 @@ def control_generator_read(num_qubit, control_source, header, endTime):
             detupleTlist, detupleGuess = controlReader(
                 control_source + f"{header}_{i}.dat"
             )
-            detupleTlist = half_step_tlist([endTime, len(detupleGuess) + 1])
+            #detupleTlist = half_step_tlist([endTime, len(detupleGuess) + 1])
         else:
             raise KeyError(f"Unable to find control in {control_source}{header}, {header}_{i}.dat does not exist.")
         cubicSpline_fit = interp1d(
@@ -114,11 +114,11 @@ def control_generator_read(num_qubit, control_source, header, endTime):
 
 
 def control_generator_random(num_qubit, guess_amp, endTime):
-    num_points = 10
+    num_points = 25
     control_args = []
     for i in range(num_qubit):
         detupleGuess = (
-            [0] + [guess_amp * random.random() - guess_amp / 2 for _ in range(num_points)] + [0])
+            [0,0,0] + [guess_amp * random.random() - guess_amp / 2 for _ in range(num_points)] + [0,0,0])
         detupleTlist = np.linspace(0, endTime, len(detupleGuess))
         cubicSpline_fit = interp1d(
             detupleTlist, detupleGuess, kind="cubic", fill_value="extrapolate"
@@ -239,16 +239,6 @@ def write_pulse(tlist,pulse,file_title):
         for t,amp in zip(tlist,pulse):
             log_f.write(f'{t:.16e}    {amp:.16e}\n')
 
-'''
-def densityMatrix(state):
-    #print(state)
-    if not isinstanceVector(state):
-        print('ipt is not a vector, do nothing')
-        return state
-    if isinstance(state[0], list) or isinstance(state[0], np.ndarray):
-        state = list(np.array(state).T[0])
-    return np.outer(np.conjugate(state),state)
-'''
 
 def densityMatrix(state):
     if not isinstanceVector(state):
@@ -396,6 +386,10 @@ def random_guess_cos(t, control_args):
     fit_func = control_args.get("fit_func")
     frequency = control_args.get("freqX")
     return fit_func(t) * np.cos(frequency * t) * 2
+
+def Hamiltonian_NR(num_qubit=3, **kwargs):
+    H0, Hc = Hamiltonian_Spin_Chain_NR(num_qubit, **kwargs)
+    return [qutip.Qobj(H0)] + [[qutip.Qobj(Hc[i]),lambda t,args:random_guess(t,args)] for i in range(len(Hc))]
 
 def Hamiltonian(num_qubit=3, **kwargs):
     H0, Hc = Hamiltonian_Spin_Chain(num_qubit, **kwargs)

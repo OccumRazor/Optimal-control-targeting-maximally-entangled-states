@@ -1,5 +1,7 @@
-import os,matplotlib.pyplot as plt,localTools,numpy as np,J_T_local,csv,read_write
-from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt,localTools,numpy as np,csv,matplotlib
+
+font = {'size'   : 15}
+matplotlib.rc('font', **font)
 
 line_style_fit = {'0+':['darkblue','--',''],'1+':['Orange','--',''],'2+':['darkred','--',''],'3+':['darkorange','--',''],'4+':['darkcyan','--',''],'5+':['Brown','--',''],'6+':['orchid','--',''],'7+':['Black','--','']}
 line_style_num = {'0+':['darkblue','','*'],'1+':['Orange','','+'],'2+':['darkred','','x'],'3+':['darkorange','','x'],'4+':['darkcyan','','1'],'5+':['Brown','','2'],'6+':['orchid','','h'],'7+':['Black','','.'],'XN':['limegreen','','^']}
@@ -45,12 +47,12 @@ def cano_fit(Tgrid):
         for i in range(8)]))
     fig,ax = plt.subplots()
     ax.plot(Tgrid,JT_T,label='min')
-    ax.set_ylabel('inFidelity')
+    ax.set_ylabel('infidelity')
     for i in [3,5,6]:
         canoLabel = f'{i}+'
         ax.plot(Tgrid,0.5-np.abs(np.cos(freqs[i]*(Tgrid - center_locs[i])))*0.5,label=rf'$|{canoLabel}\rangle$')
     ax.legend(loc='best')
-    ax.set_xlabel('T')
+    ax.set_xlabel('ns')
     plt.savefig('data/predict.pdf')
     plt.clf()
 
@@ -70,7 +72,7 @@ def plot_stored_results(goals):
         plt.plot(Ts,JTs,label = r'|6+$\rangle$',color=line_style_fit['6+'][0],linestyle=line_style_fit['6+'][1],marker=line_style_fit['6+'][2])
     plt.legend(loc='best')
     plt.xlabel('ns')
-    plt.ylabel('inFidelity')
+    plt.ylabel('infidelity')
     if goals == 'cano_s': fig_name = 'ZZcano_2nd'
     if goals == 'cano_f': fig_name = 'ZZcano_1st'
     plt.savefig(f'data/{fig_name}.pdf')
@@ -84,26 +86,44 @@ def draw_iters(csv_name,best_label,fig_num):
     with open(csv_name, mode ='r') as file:    
         csvFile = csv.DictReader(file)
         for line in csvFile:
-            JT_b_per_run.append(float(line['current_JT_ss (best cat)']))
-            JT_m_per_run.append(float(line['current_JT_ss (min cat)']))
+            JT_b_per_run.append(float(line['JT_ss_b']))
+            JT_m_per_run.append(float(line['JT_ss_m']))
             X_i.append(float(line['var_X']))
             N_i.append(float(line['var_N']))
     fig,ax = plt.subplots(2,1,figsize=(12,9))
-    ax[0].plot(JT_m_per_run,label='min')
-    ax[0].plot(JT_b_per_run,label=rf'$|{best_label}\rangle$')
-    ax[1].plot(X_i,label = 'Var(X)')
-    ax[1].plot(N_i,label = 'Var(N)')
-    ax[0].legend(loc='best')
+    ax[0].plot(X_i,'r')
+    ax2 = ax[0].twinx()
+    ax2.plot(N_i,'b')
+    ax[1].plot(JT_m_per_run,label='min')
+    ax[1].plot(JT_b_per_run,label=rf'$|{best_label}\rangle$')
+    ax[0].set_ylabel(r'$J_X$')
+    ax[0].yaxis.label.set_color('r')
+    ax[0].tick_params(axis='y',colors='r')
+    ax2.yaxis.label.set_color('b')
+    ax2.tick_params(axis='y',colors='b')
+    ax2.set_ylabel(r'$J_N$')
     ax[1].legend(loc='best')
+    if fig_num == 3:
+        ax[0].set_xticks([int(100*i) for i in range(9)])
+        ax[1].set_xticks([int(100*i) for i in range(9)])
+        ax2.set_yticks([0.0,0.2,0.4,0.6,0.8,1.0])
+        ylim = ax[0].get_ylim()
+        ax2.set_ylim(ylim[0]*10,ylim[1]*10)
+    elif fig_num == 4:
+        ax2.set_yticks([0.0,0.2,0.4,0.6,0.8])
+        ylim = ax[0].get_ylim()
+        ax2.set_ylim(ylim[0],ylim[1])
+        ax[0].set_xticks([int(100*i) for i in range(7)])
+        ax[1].set_xticks([int(100*i) for i in range(7)])
     ax[0].grid()
     ax[1].grid()
-    ax[0].set_ylabel('inFidelity')
+    ax[1].set_ylabel('infidelity')
     fig.supxlabel('iters')
-    plt.legend(loc='best')
     plt.savefig(f'data/Fig_{fig_num}.pdf')
+    plt.clf()
 
 plot_stored_results('cano_s')
 plot_stored_results('cano_f')
 draw_iters('data/iter_info_fig3.csv','0-',3)
-draw_iters('data/iter_info_fig3.csv','1+',4)
+draw_iters('data/iter_info_fig4.csv','1+',4)
 cano_fit(np.linspace(20,50,10**5))
