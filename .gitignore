@@ -5,5 +5,4 @@ __pycache__
 rf/
 .vscode/
 .venv/
-states/
 control_source/

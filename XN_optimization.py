@@ -75,7 +75,6 @@ def XN_reproduce(T,task_folder,source_folder):
     JX = JT_iter[-1]
     opt_obj.store_result(X_folder,psi_T)
     opt_obj,_ = config_task.config_opt(source_folder + 'stage_XN/')
-    print(opt_obj.observables)
     O1 = opt_obj.observables[0]
     opt_obj.config(XN_folder)
     O2_info = ''
@@ -91,7 +90,6 @@ def XN_reproduce(T,task_folder,source_folder):
     fieldnames = ['JT_ss_b','JT_ss_m','var_X','var_N','lambda_a']
     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
     writer.writeheader()
-    print(O1)
     i = 0
     while all([i < iter_stop,JX < 0.95,not convergent(JXN_iter,1e-6)]):
         last_success_controls = opt_obj.prop.obtain_pulse()
@@ -252,7 +250,7 @@ def XN_opt_continue(T,task_folder,lambda_X,control_source,iter_stop_XN):
     opt_obj.store_result(XN_folder,psi_T)
 
 import os
-for T in [30.0,35.0,40.03,45.0,50.03]:
+for T in [25.0,30.0,35.0,40.03,45.0,50.03]:
     i = 0
     while os.path.exists(f'reproduce_{T}_{i}/'): i += 1
     task_folder = f'reproduce_{T}_{i}/'

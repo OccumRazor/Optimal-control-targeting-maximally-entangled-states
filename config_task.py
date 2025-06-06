@@ -2,9 +2,6 @@ import read_write,numpy as np,localTools,re,qutip,task_obj
 from collections import defaultdict
 from scipy.interpolate import interp1d
 
-str2float_keys = ['oct_lambda_a','lambda_a','t_start','t_stop','t_rise','t_fall']
-
-
 def combine_relevant_lines(sentence_list):
     combined_lines = [sentence_list[0]+'\n']
     max_line = len(sentence_list)
@@ -99,7 +96,7 @@ def config_prop(path,zero_base = True):
     pulses_info = [config['pulse']['subsections'][i] for i in range(len(config['pulse']['subsections']))]
     for i in range(len(pulses_info)):
         for key in config['pulse']['main'].keys():
-            if key in str2float_keys:pulses_info[i][key] = float(config['pulse']['main'][key])
+            if key in task_obj.str2float_keys:pulses_info[i][key] = float(config['pulse']['main'][key])
             else:pulses_info[i][key] = config['pulse']['main'][key]
         detupleTlist, detupleGuess = read_write.controlReader(
                 path + pulses_info[i]['filename'])
@@ -158,6 +155,3 @@ def config_opt(path,zero_base = True):
         opt_obj.set_observables(observables)
     return opt_obj,config
 
-#print(parse_config_with_subsections(f'control_source/21.0/config'))
-#config_opt('control_source/rf0/')
-#config_task(f'control_source/21.0/')

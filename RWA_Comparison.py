@@ -86,6 +86,7 @@ print(f"Number of tests: {n_tests}\nAverage infidelity: {params[0]/n_tests} \nAv
         
 n_test = 10
 T = 50.0
+params = [0,0,0]
 for _ in range(n_tests):
     J_ss,dt_RWA,dt_NR = compare(T,1)
     params[0] += J_ss
